@@ -190,6 +190,7 @@ class Transport:
         self.irc.add_global_handler('pubnotice',self.irc_message)        
         self.irc.add_global_handler('privmsg',self.irc_message)
         self.irc.add_global_handler('privnotice',self.irc_message)
+        self.irc.add_global_handler('468',self.irc_message)
         self.irc.add_global_handler('whoreply',self.irc_whoreply)
         self.irc.add_global_handler('ctcp',self.irc_ctcp)
         self.irc.add_global_handler('nick',self.irc_nick)
@@ -275,9 +276,12 @@ class Transport:
                 conf['usubscribed']=True
                 userfile[fromstripped]=conf
             elif type == 'subscribed':
-                conf = userfile[fromstripped]
-                conf['subscribed']=True
-                userfile[fromstripped]=conf
+                if serfile.has_key(fromstripped):
+                    conf = userfile[fromstripped]
+                    conf['subscribed']=True
+                    userfile[fromstripped]=conf
+                else:
+                    self.jabber.send(Error(event,ERR_BAD_REQUEST))
         else:
             self.jabber.send(Error(event,MALFORMED_JID))
             return
@@ -762,6 +766,7 @@ class Transport:
                         self.jabber.send(m)
                     
     def irc_chanmode(self,conn,event):
+        # Very buggy, multiple items cases, ban etc.
         faddr = '%s%%%s@%s' %(event.target().lower(),conn.server,hostname)
         channel = event.target().lower()
         plus = None
@@ -791,10 +796,12 @@ class Transport:
             elif each == 'l': #set channel limit
                 conn.chanmode[event.target().lower()]['private'] = event.arguments()[1]
             elif each == 'b': #ban users
+                # Need to fix multiple ban case.
                 if plus:
                     conn.chanmode[event.target().lower()]['banlist'].append(event.arguments()[1])
                 else:
-                    conn.chanmode[event.target().lower()]['banlist'].remove(event.arguments()[1])
+                    if conn.chanmode[event.target().lower()]['banlist'].has_key(event.arguments()[1]):
+                        conn.chanmode[event.target().lower()]['banlist'].remove(event.arguments()[1])
             elif each == 'k': #set channel key
                 pass
     
@@ -839,7 +846,7 @@ class Transport:
         type = 'available'
         name = '%s%%%s' % (irclib.irc_lower(event.target()), conn.server)
         nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
-        if nick not in conn.memberlist[irclib.irc_lower(event.target())].keys():
+        if nick not in conn.memberlist[irclib.irc_lower(unicode(event.target()),'utf-8','replace')].keys():
             conn.memberlist[irclib.irc_lower(event.target())][nick]={'affiliation':'none','role':'none'}
         m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname, nick))
         t=m.addChild(name='x',namespace=NS_MUC_USER)
