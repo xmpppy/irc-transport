@@ -1,5 +1,5 @@
-# $Id$
 #!/usr/bin/python
+# $Id$yeah
 #
 # xmpp->IRC transport
 # Jan 2004 Copyright (c) Mike Albon
@@ -550,7 +550,7 @@ class Transport:
             self.jabber.send(m)
             
     def irc_nosuchchannel(self,conn,event):
-        m = xmpp.protocol.Presence(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' %(conn.joinchan, conn.server, hostname))
+        m = xmpp.protocol.Presence(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' %(event.arguments()[0], conn.server, hostname))
         m.setError('404','The channel is not found')
         self.jabber.send(m)
 
