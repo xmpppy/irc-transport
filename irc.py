@@ -276,7 +276,7 @@ class Transport:
                 conf['usubscribed']=True
                 userfile[fromstripped]=conf
             elif type == 'subscribed':
-                if serfile.has_key(fromstripped):
+                if userfile.has_key(fromstripped):
                     conf = userfile[fromstripped]
                     conf['subscribed']=True
                     userfile[fromstripped]=conf
@@ -800,7 +800,7 @@ class Transport:
                 if plus:
                     conn.chanmode[event.target().lower()]['banlist'].append(event.arguments()[1])
                 else:
-                    if conn.chanmode[event.target().lower()]['banlist'].has_key(event.arguments()[1]):
+                    if event.arguments()[1] in conn.chanmode[event.target().lower()]['banlist']:
                         conn.chanmode[event.target().lower()]['banlist'].remove(event.arguments()[1])
             elif each == 'k': #set channel key
                 pass
@@ -846,7 +846,7 @@ class Transport:
         type = 'available'
         name = '%s%%%s' % (irclib.irc_lower(event.target()), conn.server)
         nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
-        if nick not in conn.memberlist[irclib.irc_lower(unicode(event.target()),'utf-8','replace')].keys():
+        if nick not in conn.memberlist[irclib.irc_lower(unicode(event.target(),'utf-8','replace').encode('utf-8'))].keys():
             conn.memberlist[irclib.irc_lower(event.target())][nick]={'affiliation':'none','role':'none'}
         m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname, nick))
         t=m.addChild(name='x',namespace=NS_MUC_USER)
