@@ -230,6 +230,8 @@ class Transport:
         self.jabber.RegisterHandler('iq',self.xmpp_iq_version,typ = 'get', ns='jabber:iq:version')
         self.jabber.RegisterHandler('iq',self.xmpp_iq_agents,typ = 'get', ns='jabber:iq:agent')
         self.jabber.RegisterHandler('iq',self.xmpp_iq_browse,typ = 'get', ns='jabber:iq:browse')
+        self.jabber.RegisterHandler('iq',self.xmpp_iq_mucadmin_set,typ = 'set', ns='http://jabber.org/protocol/muc#admin')
+        self.jabber.RegisterHandler('iq',self.xmpp_iq_mucadmin_get,typ = 'get', ns='http://jabber.org/protocol/muc#admin')
         self.jabber.RegisterDisconnectHandler(self.xmpp_disconnect)
     #XMPP Handlers
     def xmpp_presence(self, con, event):
@@ -452,8 +454,62 @@ class Transport:
                     payload.append(Node('item',attrs = zattr))
         m.setQueryPayload(payload)
         self.jabber.send(m)
-    
-    #IRC methods
+
+    def xmpp_iq_mucadmin_set(self, con, event):
+        fromjid = event.getFrom()
+        to = event.getTo()
+        room = to.getNode().lower()
+        id = event.getID()
+        try:
+            channel, server = string.split(room,'%')
+        except ValueError:
+            m = xmpp.protocol.IQ(to=event.getFrom(), frm=event.getTo(), typ = 'error', body=event.getBody())
+            m.setID(id)
+            m.setError('500','Invalid request')
+            self.jabber.send(m)
+            return
+        if fromjid not in self.users.keys():
+            m = xmpp.protocol.IQ(to=event.getFrom(), frm=event.getTo(), typ = 'error', body=event.getBody())
+            m.setID(id)
+            m.setError('500','Invalid request')
+            self.jabber.send(m)
+            return
+        if server not in self.users[fromjid].keys():
+            m = xmpp.protocol.IQ(to=event.getFrom(), frm=event.getTo(), typ = 'error', body=event.getBody())
+            m.setID(id)
+            m.setError('500','Invalid request')
+            self.jabber.send(m)
+            return
+        if channel not in self.users[fromjid][server].memberlist.keys():
+            m = xmpp.protocol.IQ(to=event.getFrom(), frm=event.getTo(), typ = 'error', body=event.getBody())
+            m.setID(id)
+            m.setError('500','Invalid request')
+            self.jabber.send(m)
+            return
+        ns = event.getQueryNS()
+        t = event.getQueryPayload()
+        if self.users[fromjid][server].memberlist[self.users[fromjid][server].nick]['role'] != 'moderator' or self.users[fromjid][server].memberlist[self.users[fromjid][server].nick]['affiliation'] != 'owner':
+            m = xmpp.protocol.IQ(to=event.getFrom(), frm=event.getTo(), typ = 'error', body=event.getBody())
+            m.setID(id)
+            m.setError('500','Invalid request')
+            self.jabber.send(m)
+            return
+        for each in t:
+            if t[0].getName() == 'item':
+                attr = t[0].getAttrs()
+                if attr.has_key('role'):
+                    if attr['role'] == 'moderator':
+                        self.users[fromjid][server].mode(channel,'%s %s'%('+o',attr['nick']))    
+                    elif attr['role'] == 'participant':
+                        self.users[fromjid][server].mode(channel,'%s %s'%('+v',attr['nick']))
+                    elif attr['role'] == 'visitor':
+                        self.users[fromjid][server].mode(channel,'%s %s'%('-v',attr['nick']))
+                        self.users[fromjid][server].mode(channel,'%s %s'%('-o',attr['nick']))
+                    elif attr['role'] == 'none':
+                        self.users[fromjid][server].kick(channel,attr['nick'],'Kicked')#Need to add reason gathering
+                        
+                        
+                    #IRC methods
     def irc_doquit(self,connection):
         server = connection.server
         nickname = connection.nickname
