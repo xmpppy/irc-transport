@@ -560,11 +560,12 @@ class Transport:
                         
     def xmpp_iq_register_set(self, con, event):
         remove = False
-        charset= self.charset
+        
         fromjid = event.getFrom().getStripped().encode('utf8')
+        ucharset = charset
         for each in event.getQueryPayload():
             if each.getName() == 'charset':
-                charset = each.getData()
+                ucharset = each.getData()
             elif each.getName() == 'remove':
                 remove = True
             else:
@@ -575,11 +576,14 @@ class Transport:
             else:
                 conf = {}
             try:
-                codecs.lookup(charset)
+                codecs.lookup(ucharset)
             except LookupError:
                 self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
                 return
-            conf['charset']=charset
+            except ValueError:
+                self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
+                return                
+            conf['charset']=ucharset
             userfile[fromjid]=conf
             self.jabber.send(Presence(to=event.getFrom(), frm = event.getTo()))
             if not conf.has_key('subscribed'):
@@ -702,25 +706,25 @@ class Transport:
             
     def irc_nosuchchannel(self,conn,event):
         error=ErrorNode(ERR_ITEM_NOT_FOUND,'The channel is not found')
-        self.jabber.send(Presence(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' %(event.arguments()[0], conn.server, hostname)),error,reply=0)
+        self.jabber.send(Presence(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' %(event.arguments()[0], conn.server, hostname),payload=[error]))
 
     def irc_notregistered(self,conn,event):
         error=ErrorNode(ERR_FORBIDDEN,text='Not registered and registration is not supported')
-        self.jabber.send(Presence(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' %(conn.joinchan, conn.server, hostname)),payload=error)
+        self.jabber.send(Presence(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' %(conn.joinchan, conn.server, hostname),payload=[error]))
     
     def irc_nosuchnick(self, conn, event):
         error=ErrorNode(ERR_ITEM_NOT_FOUND,text='Nickname not found')
-        self.jabber.send(Message(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' % (event.source(), conn.server, hostname)),payload=error)
+        self.jabber.send(Message(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' % (event.source(), conn.server, hostname),payload=[error]))
     
     def irc_cannotsend(self,conn,event):
         error=ErrorNode(ERR_FORBIDDEN)
-        self.jabber.send(Message(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' % (event.source(), conn.server, hostname)),payload=error)
+        self.jabber.send(Message(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' % (event.source(), conn.server, hostname),payload=[error]))
     
     def irc_redirect(self,conn,event):
         new = '%s%%%s@%s'% (event.arguments[1],conn.server, hostname)
         old = '%s%%%s@%s'% (event.arguments[0],conn.server, hostname)
         error=ErrorNode(ERR_REDIRECT,new)
-        self.jabber.send(Presence(to=conn.fromjid, typ='error', frm = old, payload=error))
+        self.jabber.send(Presence(to=conn.fromjid, typ='error', frm = old, payload=[error]))
         conn.memberlist[event.arguments[1]]={}
         conn.part(event.arguments[1])
         
@@ -773,24 +777,24 @@ class Transport:
                 for each in event.arguments()[1:]:
                     conn.who(channel,each)
             elif each == 'p': #Private Room
-                conn.chanmode[event.target()]['private'] = plus
+                conn.chanmode[event.target().lower()]['private'] = plus
             elif each == 's': #Secret
-                conn.chanmode[event.target()]['secret'] = plus
+                conn.chanmode[event.target().lower()]['secret'] = plus
             elif each == 'i': #invite only
-                conn.chanmode[event.target()]['invite'] = plus
+                conn.chanmode[event.target().lower()]['invite'] = plus
             elif each == 't': #only chanop can set topic
-                conn.chanmode[event.target()]['topic'] = plus
+                conn.chanmode[event.target().lower()]['topic'] = plus
             elif each == 'n': #no not in channel messages
-                conn.chanmode[event.target()]['notmember'] = plus
+                conn.chanmode[event.target().lower()]['notmember'] = plus
             elif each == 'm': #moderated chanel
-                conn.chanmode[event.target()]['moderated'] = plus
+                conn.chanmode[event.target().lower()]['moderated'] = plus
             elif each == 'l': #set channel limit
-                conn.chanmode[event.target()]['private'] = event.arguments()[1]
+                conn.chanmode[event.target().lower()]['private'] = event.arguments()[1]
             elif each == 'b': #ban users
                 if plus:
-                    conn.chanmode[event.target()]['banlist'].append(event.arguments()[1])
+                    conn.chanmode[event.target().lower()]['banlist'].append(event.arguments()[1])
                 else:
-                    conn.chanmode[event.target()]['banlist'].remove(event.arguments()[1])
+                    conn.chanmode[event.target().lower()]['banlist'].remove(event.arguments()[1])
             elif each == 'k': #set channel key
                 pass
     
