@@ -643,7 +643,7 @@ class Transport:
         if event.getQueryPayload().getTag('remove'):
         	remove = True
         elif event.getQueryPayload().getTag('charset'):
-        	ucharset = event.getQueryPayload().getTag('charset')
+        	ucharset = event.getQueryPayload().getTagData('charset')
         else:
         	self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
         if not remove:
