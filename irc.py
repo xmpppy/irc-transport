@@ -23,6 +23,7 @@ port = None
 secret = None
 localaddress = ""
 connection = None
+charset = 'utf-8'
 #server = '127.0.0.1'
 #hostname = 'irc.localhost'
 #port = 9000
@@ -137,7 +138,10 @@ def colourparse(str):
         else:
             s = '%s%s'%(s,e)
             hs = '%s%s'%(hs,e)
-    s = unicode(s,'utf8','replace') # Language detection stuff should go here.
+    try:
+        s = unicode(s,'utf8','strict') # Language detection stuff should go here.
+    except:
+        s = unicode(s, charset)
     return s
   
   
@@ -456,19 +460,19 @@ class Transport:
         connection.close()
         
     def irc_settopic(self,connection,channel,line):
-        connection.topic(channel.encode('utf-8'),line.encode('utf-8'))
+        connection.topic(channel.encode(charset),line.encode(charset))
     
     def irc_sendroom(self,connection,channel,line):
         lines = string.split(line, '/n')
         for each in lines:
             #print channel, each
-            connection.privmsg(channel.encode('utf-8'),each.encode('utf-8'))
+            connection.privmsg(channel.encode(charset),each.encode(charset))
 
     def irc_sendctcp(self,type,connection,channel,line):
         lines = string.split(line, '/n')
         for each in lines:
             #print channel, each
-            connection.ctcp(type,channel.encode('utf-8'),each.encode('utf-8'))
+            connection.ctcp(type,channel.encode(charset),each.encode(charset))
 
     def irc_newconn(self,channel,server,nick,fromjid):
         try:
@@ -619,9 +623,9 @@ class Transport:
         nick = string.split(event.source(),'!')[0]
         channel = event.target().lower()
         if len(event.arguments())==2:
-            line = colourparse(event.arguments()[1]).encode('utf-8','replace')
+            line = colourparse(event.arguments()[1])
         else:
-            line = colourparse(event.arguments()[0]).encode('utf-8','replace')
+            line = colourparse(event.arguments()[0])
         m = xmpppy.protocol.Message(to=conn.fromjid,frm = '%s%%%s@%s/%s' % (event.arguments()[0].lower(),conn.server,hostname,nick), type='groupchat', subject = line)
         self.jabber.send(m)
         
@@ -673,12 +677,12 @@ class Transport:
         if irclib.is_channel(event.target()):
             type = 'groupchat'
             room = '%s%%%s' %(event.target().lower(),conn.server)
-            m = xmpppy.protocol.Message(to=conn.fromjid,body=colourparse(event.arguments()[0].lower()).encode('utf-8','replace'),type=type,frm='%s@%s/%s' %(room, hostname,nick))
+            m = xmpppy.protocol.Message(to=conn.fromjid,body=colourparse(event.arguments()[0].lower()),type=type,frm='%s@%s/%s' %(room, hostname,nick))
         else:
             type = 'chat'
             name = event.source()
             name = '%s%%%s' %(nick,conn.server)
-            m = xmpppy.protocol.Message(to=conn.fromjid,body=colourparse(event.arguments()[0].lower()).encode('utf-8','replace'),type=type,frm='%s@%s' %(name, hostname))
+            m = xmpppy.protocol.Message(to=conn.fromjid,body=colourparse(event.arguments()[0].lower()),type=type,frm='%s@%s' %(name, hostname))
         #print m.__str__()
         self.jabber.send(m)                     
      
@@ -689,7 +693,7 @@ class Transport:
                 type = 'groupchat'
                 room = '%s%%%s' %(event.target().lower(),conn.server)
                 
-                m = xmpppy.protocol.Message(to=conn.fromjid,body='/me '+colourparse(event.arguments()[1]).encode('utf-8','replace'),type=type,frm='%s@%s/%s' %(room, hostname,nick))
+                m = xmpppy.protocol.Message(to=conn.fromjid,body='/me '+colourparse(event.arguments()[1]),type=type,frm='%s@%s/%s' %(room, hostname,nick))
             else:
                 type = 'chat'
                 name = event.source()
@@ -697,7 +701,7 @@ class Transport:
                     name = '%s%%%s' %(nick,conn.server)
                 except:
                     name = '%s%%%s' %(conn.server,conn.server)
-                m = xmpppy.protocol.Message(to=conn.fromjid,body='/me '+colourparse(event.arguments()[1]).encode('utf-8','replace'),type=type,frm='%s@%s' %(name, hostname))
+                m = xmpppy.protocol.Message(to=conn.fromjid,body='/me '+colourparse(event.arguments()[1]),type=type,frm='%s@%s' %(name, hostname))
             #print m.__str__()
             self.jabber.send(m) 
         elif event.arguments()[0] == 'VERSION':
@@ -720,6 +724,8 @@ if __name__ == '__main__':
     secret = configfile.get('transport','Secret')
     if configfile.has_option('transport','LocalAddress'):
         localaddress = configfile.get('transport','LocalAddress')
+    if configfule.has_option('transport','Charset'):
+        charset = configfile.get('transport','Charset')
     #connection = xmpppy.client.Component(hostname,port)
     #connection.connect((server,port))
     #connection.auth(hostname,secret)
