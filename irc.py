@@ -67,7 +67,7 @@ def colourparse(str):
         #try:
         #    s = s.encode('utf-8','replace')
         #except:
-        s = s.encode('ascii','replace')
+        s = s.encode('utf8','replace')
     return s
   
   
@@ -346,7 +346,7 @@ class Transport:
     def irc_error(self,conn,event):
         if conn.server in self.users[conn.fromjid].keys():
             try:
-                for each in self.memberlist.keys():
+                for each in conn.memberlist.keys():
                     t = xmpppy.protocol.Presence(to=conn.fromjid, type = 'unavailable', frm='%s%%%s@%s' %(each,conn.server,hostname))
                     self.jabber.send(t)
                 del self.users[conn.fromjid][conn.server]
@@ -365,8 +365,8 @@ class Transport:
     def irc_nick(self, conn, event):
         old = string.split(event.source(),'!')[0]
         new = event.target()
-        for each in self.memberlist.keys():
-            if old in self.memberlist[each].keys():
+        for each in conn.memberlist.keys():
+            if old in conn.memberlist[each].keys():
                 m = xmpppy.protocol.Presence(to=conn.fromjid,type = 'unavailable',frm = '%s%%%s@%s/%s' % (each,conn.server,hostname,old))
                 p = m.addChild(name='x', namespace='http://jabber.org/protocol/muc#user')
                 p.addChild(name='item', attrs={'nick':new})
@@ -374,9 +374,9 @@ class Transport:
                 self.jabber.send(m)
                 m = xmpppy.protocol.Presence(to=conn.fromjid,type = 'available', frm = '%s%%%s@%s/%s' % (each,conn.server,hostname,new))
                 self.jabber.send(m)
-                t=self.memberlist[each][old]
-                del self.memberlist[each][old]
-                self.memberlist[each][new] = t
+                t=conn.memberlist[each][old]
+                del conn.memberlist[each][old]
+                conn.memberlist[each][new] = t
                 
 
     def irc_welcome(self,conn,event):
@@ -407,15 +407,15 @@ class Transport:
         type = 'unavailable'
         name = '%s%%%s' % (event.target().lower(), conn.server)
         m = xmpppy.protocol.Presence(to=conn.fromjid,type=type,frm='%s@%s/%s' %(name, hostname,event.arguments()[0]))
-        if event.arguments()[0] == conn.nickname:
-            t=m.addChild(name='x',namespace='http://jabber.org/protocol/muc#user')
-            p=t.addChild(name='item',attrs={'affiliation':'none','role':'none'})
-            p.addChild(name='reason',payload=[event.arguments()[1]])
-            t.addChild(name='status',attrs={'code':'307'})
+        t=m.addChild(name='x',namespace='http://jabber.org/protocol/muc#user')
+        p=t.addChild(name='item',attrs={'affiliation':'none','role':'none'})
+        p.addChild(name='reason',payload=[event.arguments()[1]])
+        t.addChild(name='status',attrs={'code':'307'})
         self.jabber.send(m)
         #print self.users[conn.fromjid]
-        if self.memberlist.has_key(event.target().lower()):
-            del self.memberlist[event.target().lower()]
+        if event.arguments()[0] == conn.nickname:
+            if conn.memberlist.has_key(event.target().lower()):
+                del conn.memberlist[event.target().lower()]
         self.test_inuse(conn)
         
     def irc_topic(self,conn,event):
