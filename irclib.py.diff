@@ -1,37 +1,16 @@
---- /usr/lib/python2.3/site-packages/irclib.py	2003-10-30 06:27:42.000000000 +0000
-+++ irclib.py	2004-04-28 11:21:08.000000000 +0100
-@@ -75,7 +75,7 @@
- import types
- 
- VERSION = 0, 4, 1
--DEBUG = 0
-+DEBUG = 1
- 
- # TODO
- # ----
-@@ -446,9 +446,9 @@
-         This method closes the connection permanently; after it has
-         been called, the object is unusable.
-         """
--
--        self.disconnect("Closing object")
-         self.irclibobj._remove_connection(self)
-+        self.disconnect("Closing object")
-+        
- 
-     def _get_socket(self):
-         """[Internal]"""
-@@ -482,11 +482,11 @@
-             new_data = self.socket.recv(2**14)
-         except socket.error, x:
-             # The server hung up.
--            self.disconnect("Connection reset by peer")
-+            self.close("Connection reset by peer")
-             return
-         if not new_data:
-             # Read nothing: connection must be down.
--            self.disconnect("Connection reset by peer")
-+            self.close("Connection reset by peer")
-             return
- 
-         lines = _linesep_regexp.split(self.previous_buffer + new_data)
+78c78
+< DEBUG = 0
+---
+> DEBUG = 1
+449c449
+< 
+---
+>         
+451c451
+<         self.irclibobj._remove_connection(self)
+---
+>         
+644c644
+< 
+---
+>         self.irclibobj._remove_connection(self)
