@@ -1,5 +1,5 @@
 #!/usr/bin/python
-# $Id$yeah
+# $Id$
 #
 # xmpp->IRC transport
 # Jan 2004 Copyright (c) Mike Albon
@@ -8,7 +8,7 @@
 # For a full copy of the license please go here http://www.gnu.org/licenses/licenses.html#GPL
 
 import xmpp, urllib2, sys, time, irclib, re, ConfigParser, os, select
-from threading import *
+#from threading import *
 from xmpp.protocol import *
 
 #import IPython.ultraTB
@@ -153,6 +153,7 @@ def connectxmpp():
     while not connection.connect((server,port)):
         time.sleep(10)
     if connection.auth(hostname,secret):
+        socketlist[connection.Connection._sock]='xmpp'
         return True
     else:
         return False
@@ -383,6 +384,7 @@ class Transport:
                 self.irc_doquit(item)
             del self.users[each]
         #del connection    
+        del socketlist[connection.Connection._sock]
         while not connectxmpp():
             time.sleep(5)
         self.register_handlers()
@@ -775,7 +777,7 @@ if __name__ == '__main__':
     while not connectxmpp():
         time.sleep(5)
     ircobj = irclib.IRC(fn_to_add_socket=irc_add_conn,fn_to_remove_socket=irc_del_conn)
-    socketlist[connection.Connection._sock]='xmpp'
+    #socketlist[connection.Connection._sock]='xmpp'
     #jabber = ComponentThread(connection)
     #irc = IrcThread(ircobj)
     transport = Transport(connection,ircobj)
