@@ -451,15 +451,16 @@ class Transport:
     
     def irc_quit(self,conn,event):
         type = 'unavailable'
+        nick = irclib.nm_to_n(event.source())
         for each in conn.memberlist.keys():
-            if string.split(event.source(),'!')[0] in conn.memberlist[each].keys():
-                del conn.memberlist[each][string.split(event.source(),'!')[0]]
+            if nick in conn.memberlist[each].keys():
+                del conn.memberlist[each][nick]
                 name = '%s%%%s' % (each, conn.server)
                 m = xmpppy.protocol.Presence(to=conn.fromjid,type=type,frm='%s@%s/%s' %(name, hostname,string.split(event.source(),'!')[0]))
                 self.jabber.send(m)
     
     def irc_nick(self, conn, event):
-        old = string.split(event.source(),'!')[0]
+        old = irclib.nm_to_n(event.source())
         new = event.target()
         for each in conn.memberlist.keys():
             if old in conn.memberlist[each].keys():
@@ -505,8 +506,9 @@ class Transport:
     def irc_part(self,conn,event):
         type = 'unavailable'
         name = '%s%%%s' % (irclib.irc_lower(event.target()), conn.server)
+        nick = irclib.nm_to_n(event.source())
         try:
-            if string.split(event.source(),'!')[0] in conn.memberlist[irclib.irc_lower(event.target())].keys():
+            if nick in conn.memberlist[irclib.irc_lower(event.target())].keys():
                 del conn.memberlist[irclib.irc_lower(event.target())][string.split(event.source(),'!')[0]]
         except KeyError:
             pass
@@ -531,7 +533,7 @@ class Transport:
     def irc_topic(self,conn,event):
         nick = string.split(event.source(),'!')[0]
         channel = event.target().lower()
-        if len(event.arguements())==2:
+        if len(event.arguments())==2:
             line = colourparse(event.arguments()[1]).encode('utf-8','replace')
         else:
             line = colourparse(event.arguments()[0]).encode('utf-8','replace')
@@ -541,9 +543,10 @@ class Transport:
     def irc_join(self,conn,event):
         type = 'available'
         name = '%s%%%s' % (irclib.irc_lower(event.target()), conn.server)
-        if string.split(event.source(),'!')[0] not in conn.memberlist[irclib.irc_lower(event.target())].keys():
-            conn.memberlist[irclib.irc_lower(event.target())][string.split(event.source(),'!')[0]]={'affiliation':'none','role':'none'}
-        m = xmpppy.protocol.Presence(to=conn.fromjid,type=type,frm='%s@%s/%s' %(name, hostname,string.split(event.source(),'!')[0]))
+        nick = irclib.nm_to_n(event.source())
+        if nick not in conn.memberlist[irclib.irc_lower(event.target())].keys():
+            conn.memberlist[irclib.irc_lower(event.target())][nick]={'affiliation':'none','role':'none'}
+        m = xmpppy.protocol.Presence(to=conn.fromjid,type=type,frm='%s@%s/%s' %(name, hostname, nick))
         t=m.addChild(name='x',namespace='http://jabber.org/protocol/muc#user')
         p=t.addChild(name='item',attrs={'affiliation':'none','role':'visitor'})
         #print m.__str__()
@@ -577,12 +580,13 @@ class Transport:
         if irclib.is_channel(event.target()):
             type = 'groupchat'
             room = '%s%%%s' %(event.target().lower(),conn.server)
-            m = xmpppy.protocol.Message(to=conn.fromjid,body=colourparse(event.arguments()[0].lower()).encode('utf-8','replace'),type=type,frm='%s@%s/%s' %(room, hostname,string.split(event.source(),'!')[0]))
+            nick = irclib.nm_to_n(event.source())
+            m = xmpppy.protocol.Message(to=conn.fromjid,body=colourparse(event.arguments()[0].lower()).encode('utf-8','replace'),type=type,frm='%s@%s/%s' %(room, hostname,nick))
         else:
             type = 'chat'
             name = event.source()
             try:
-                name = '%s%%%s' %(string.split(event.source(),'!')[0],conn.server)
+                name = '%s%%%s' %(nick,conn.server)
             except:
                 name = '%s%%%s' %(conn.server,conn.server)
             m = xmpppy.protocol.Message(to=conn.fromjid,body=colourparse(event.arguments()[0].lower()).encode('utf-8','replace'),type=type,frm='%s@%s' %(name, hostname))
@@ -594,12 +598,13 @@ class Transport:
             if irclib.is_channel(event.target()):
                 type = 'groupchat'
                 room = '%s%%%s' %(event.target().lower(),conn.server)
-                m = xmpppy.protocol.Message(to=conn.fromjid,body='/me '+colourparse(event.arguments()[1]).encode('utf-8','replace'),type=type,frm='%s@%s/%s' %(room, hostname,string.split(event.source(),'!')[0]))
+                nick = irclib.nm_to_n(event.source())
+                m = xmpppy.protocol.Message(to=conn.fromjid,body='/me '+colourparse(event.arguments()[1]).encode('utf-8','replace'),type=type,frm='%s@%s/%s' %(room, hostname,nick))
             else:
                 type = 'chat'
                 name = event.source()
                 try:
-                    name = '%s%%%s' %(string.split(event.source(),'!')[0],conn.server)
+                    name = '%s%%%s' %(nick,conn.server)
                 except:
                     name = '%s%%%s' %(conn.server,conn.server)
                 m = xmpppy.protocol.Message(to=conn.fromjid,body='/me '+colourparse(event.arguments()[1]).encode('utf-8','replace'),type=type,frm='%s@%s' %(name, hostname))
