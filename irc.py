@@ -1021,7 +1021,21 @@ if __name__ == '__main__':
     #irc = IrcThread(ircobj)
     transport = Transport(connection,ircobj)
     while 1:
-        (i , o, e) = select.select(socketlist.keys(),[],[],1)
+        try:
+            (i , o, e) = select.select(socketlist.keys(),[],[],1)
+        except socket.error:
+            for userkey in transport.users:
+                user = transport.users[userkey]
+                for serverkey, server in user.items():
+                    if server._get_socket() == None:
+                        print "disconnected by %s" % server.get_server_name()
+                        transport.irc_doquit(server)
+            for each in socketlist.keys():
+                try:
+                    (ci, co, ce) = select.select([],[],[each],0)
+                except socket.error:
+                    irc_del_conn(each)
+            (i , o, e) = select.select(socketlist.keys(),[],[],1)
         for each in i:
             if socketlist[each] == 'xmpp':
                 #connection.Connection.receive()
