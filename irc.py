@@ -211,6 +211,7 @@ class Transport:
         self.irc.add_global_handler('part',self.irc_part)
         self.irc.add_global_handler('quit',self.irc_quit)
         self.irc.add_global_handler('kick',self.irc_kick)
+        self.irc.add_global_handler('mode',self.irc_mode)
         self.irc.add_global_handler('error',self.irc_error)
         self.irc.add_global_handler('topic',self.irc_topic)
         self.irc.add_global_handler('nicknameinuse',self.irc_nicknameinuse)
@@ -498,9 +499,34 @@ class Transport:
     
     def irc_mode(self,conn,event):
         #modelist = irclib.parse_channel_modes(event.arguments())
+        faddr = '%s%%%s@%s' %(event.target().lower(),conn.server,hostname)
         if event.arguments()[0] == '+o':
-            if irclib.irc_lower(event.target()) in conn.memberlist.keys():
-                pass
+            if irclib.irc_lower(event.target().lower()) in conn.memberlist.keys():
+                for each in event.arguments()[1:]:
+                    conn.memberlist[event.target().lower()][each]['role']='moderator'
+                    m = xmpppy.protocol.Presence(to=conn.fromjid,type='available',frm = '%s/%s' %(faddr,each))
+                    t = m.addChild(name='x',namespace='http://jabber.org/protocol/muc#user')
+                    p = t.addChild(name='item',attrs=conn.memberlist[event.target().lower()][each])
+                    self.jabber.send(m)
+        elif event.arguments()[0] == '-o' or event.arguments()[0] == '-v':
+            if irclib.irc_lower(event.target().lower()) in conn.memberlist.keys():
+                for each in event.arguments()[1:]:
+                    conn.memberlist[event.target().lower()][each]['role']='visitor'
+                    m = xmpppy.protocol.Presence(to=conn.fromjid,type='available',frm = '%s/%s' %(faddr,each))
+                    t = m.addChild(name='x',namespace='http://jabber.org/protocol/muc#user')
+                    p = t.addChild(name='item',attrs=conn.memberlist[event.target().lower()][each])
+                    self.jabber.send(m)
+        elif event.arguments()[0] == '+v':
+            if irclib.irc_lower(event.target().lower()) in conn.memberlist.keys():
+                for each in event.arguments()[1:]:
+                    conn.memberlist[event.target().lower()][each]['role']='participant'
+                    m = xmpppy.protocol.Presence(to=conn.fromjid,type='available',frm = '%s/%s' %(faddr,each))
+                    t = m.addChild(name='x',namespace='http://jabber.org/protocol/muc#user')
+                    p = t.addChild(name='item',attrs=conn.memberlist[event.target().lower()][each])
+                    self.jabber.send(m)
+        else:
+            pass
+                    
                     
     
     def irc_part(self,conn,event):
@@ -557,15 +583,18 @@ class Transport:
         faddr = '%s@%s/%s' % (name, hostname, event.arguments()[4])
         m = xmpppy.protocol.Presence(to=conn.fromjid,type='available',frm=faddr)
         t = m.addChild(name='x', namespace='http://jabber.org/protocol/muc#user')
+        affiliation = 'none'
         if '@' in event.arguments()[5]:
             role = 'moderator'
-            affiliation = 'admin' 
+            #affiliation = 'admin' 
         elif '+' in event.arguments()[5]:
             role = 'participant'
-            affiliation = 'member'
+            #affiliation = 'member'
+        elif '*' in event.arguments()[5]:
+            affiliation = 'admin'
         else:
             role = 'visitor'
-            affiliation = 'none'
+            #affiliation = 'none'
         p=t.addChild(name='item',attrs={'affiliation':affiliation,'role':role})
         self.jabber.send(m)
         try:
