@@ -37,7 +37,7 @@ NS_MUC = 'http://jabber.org/protocol/muc'
 NS_MUC_USER = NS_MUC+'#user'
 NS_MUC_ADMIN = NS_MUC+'#admin'
 NS_MUC_OWNER = NS_MUC+'#owner'
-
+irccolour = ['#FFFFFF','#000000','#0000FF','#00FF00','#FF0000','#F08000','#8000FF','#FFF000','#FFFF00','#80FF00','#00FF80','#00FFFF','#0080FF','#FF80FF','#808080','#A0A0A0']
 def irc_add_conn(con):
     socketlist[con]='irc'
     
@@ -59,6 +59,7 @@ def colourparse(str,charset):
     foreground=None
     background=None
     bold=None
+    underline = None
     s = ''
     html=[]
     hs = ''
@@ -70,14 +71,14 @@ def colourparse(str,charset):
         elif e == '\x01':   
             pass #'Blue' CtCP Code
         elif e == '\x02':#'Green' Also Bold
-            html.append((hs,foreground,background,bold))
+            html.append((hs,foreground,background,bold,underline))
             if bold == True:
                 bold = None
             else:
                 bold = True
             hs = ''
         elif e == '\x03':#'Cyan' Also Colour
-            html.append((hs,foreground,background,bold))
+            html.append((hs,foreground,background,bold,underline))
             foreground = None
             #background = None
             if not ctrseq:
@@ -106,8 +107,22 @@ def colourparse(str,charset):
         elif e == '\x0e':
             print 'Yellow'
         elif e == '\x0f':
-            print 'White'
-        elif e in ['\x10', '\x11', '\x12', '\x13', '\x14', '\x15', '\x16', '\x17', '\x18', '\x19', '\x1a', '\x1b', '\x1c', '\x1d', '\x1e', '\x1f']:
+            #go back to normal
+            html.append((hs,foreground,background,bold,underline))
+            foreground = None
+            background = None
+            bold = None
+            underline = None
+            hs = ''
+            #print 'White'
+        elif e == '\x1f':
+            html.append((hs,foreground,background,bold,underline))
+            if bold == True:
+                bold = None
+            else:
+                bold = True
+            hs = ''
+        elif e in ['\x10', '\x11', '\x12', '\x13', '\x14', '\x15', '\x16', '\x17', '\x18', '\x19', '\x1a', '\x1b', '\x1c', '\x1d', '\x1e']:
             print 'Other Escape'
         elif ctrseq == True:
             if e.isdigit():
@@ -145,11 +160,42 @@ def colourparse(str,charset):
         else:
             s = '%s%s'%(s,e)
             hs = '%s%s'%(hs,e)
+    html.append((hs,foreground,background,bold,underline))
+    chtml = []
     try:
         s = unicode(s,'utf8','strict') # Language detection stuff should go here.
+        for each in html:
+            chtml.append((unicode(each[0],'utf-8','strict'),each[1],each[2],each[3],each[4]))
     except:
         s = unicode(s, charset,'replace')
-    return s
+        for each in html:
+            chtml.append((unicode(each[0],charset,'replace'),each[1],each[2],each[3],each[4]))
+    if len(chtml) >1:
+        html = Node('html')
+        html.setNamespace('http://jabber.org/protocol/xhtml-im')
+        xhtml = html.addChild('body',namespace='http://www.w3.org/1999/xhtml')
+        print chtml
+        for each in chtml:
+            style = ''
+            if each[1] != None and int(each[1])<16:
+                foreground = irccolour[int(each[1])]
+                print foreground
+                style = '%scolor:%s;'%(style,foreground)
+            if each[2] != None and int(each[2])<16:
+                background = irccolour[int(each[2])]
+                style = '%sbackground-color:%s;'%(style,background)
+            if each[3]:
+                style = '%sfont-weight:bold;'%style
+            if each[4]:
+                style = '%stext-decoration:underline;'%style
+            if each[0] != '':
+                if style == '':
+                    xhtml.addData(each[0])
+                else:
+                    xhtml.addChild(name = 'span', attrs = {'style':style},payload=each[0])
+    else:
+        html = ''
+    return s,html
   
   
 def connectxmpp():
@@ -271,10 +317,13 @@ class Transport:
                 self.jabber.send(Error(event,ERR_FEATURE_NOT_IMPLEMENTED))
         elif to == hostname:
             if type == 'subscribe':
-                self.jabber.send(Presence(to=fromjid, frm = to, typ = 'subscribed'))
-                conf = userfile[fromstripped]
-                conf['usubscribed']=True
-                userfile[fromstripped]=conf
+                if userfile.has_key(fromstripped):
+                    self.jabber.send(Presence(to=fromjid, frm = to, typ = 'subscribed'))
+                    conf = userfile[fromstripped]
+                    conf['usubscribed']=True
+                    userfile[fromstripped]=conf
+                else:
+                    self.jabber.send(Error(event,ERR_BAD_REQUEST))
             elif type == 'subscribed':
                 if userfile.has_key(fromstripped):
                     conf = userfile[fromstripped]
@@ -319,10 +368,13 @@ class Transport:
         if type == 'groupchat':
             if irclib.is_channel(channel):
                 if event.getSubject():
-                    if (self.users[fromjid][server].chanmode['topic']==True and self.users[fromjid][server].memberlist[self.users[fromjid][server].nickname]['role'] == 'moderator') or self.users[fromjid][server].chanmode['topic']==False:
-                        self.irc_settopic(self.users[fromjid][server],channel,event.getSubject())
+                    if self.users[fromjid][server].chanmode.has_key('topic'):
+                        if (self.users[fromjid][server].chanmode['topic']==True and self.users[fromjid][server].memberlist[self.users[fromjid][server].nickname]['role'] == 'moderator') or self.users[fromjid][server].chanmode['topic']==False:
+                            self.irc_settopic(self.users[fromjid][server],channel,event.getSubject())
+                        else:
+                            self.jabber.send(Error(event,ERR_FORBIDDEN))
                     else:
-                        self.jabber.send(Error(event,ERR_FORBIDDEN))
+                        self.irc_settopic(self.users[fromjid][server],channel,event.getSubject())
                 elif event.getBody() != '':
                     if event.getBody()[0:3] == '/me':
                         self.irc_sendctcp('ACTION',self.users[fromjid][server],channel,event.getBody()[4:])
@@ -725,12 +777,12 @@ class Transport:
         self.jabber.send(Message(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' % (event.source(), conn.server, hostname),payload=[error]))
     
     def irc_redirect(self,conn,event):
-        new = '%s%%%s@%s'% (event.arguments[1],conn.server, hostname)
-        old = '%s%%%s@%s'% (event.arguments[0],conn.server, hostname)
+        new = '%s%%%s@%s'% (event.arguments()[1],conn.server, hostname)
+        old = '%s%%%s@%s'% (event.arguments()[0],conn.server, hostname)
         error=ErrorNode(ERR_REDIRECT,new)
         self.jabber.send(Presence(to=conn.fromjid, typ='error', frm = old, payload=[error]))
-        conn.memberlist[event.arguments[1]]={}
-        conn.part(event.arguments[1])
+        conn.memberlist[event.arguments()[1]]={}
+        conn.part(event.arguments()[1])
         
     
     def irc_mode(self,conn,event):
@@ -823,7 +875,7 @@ class Transport:
         m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,irclib.irc_lower(event.arguments()[0])))
         t=m.addChild(name='x',namespace=NS_MUC_USER)
         p=t.addChild(name='item',attrs={'affiliation':'none','role':'none'})
-        p.addChild(name='reason',payload=[colourparse(event.arguments()[1],conn.charset)])
+        p.addChild(name='reason',payload=[colourparse(event.arguments()[1],conn.charset)][0])
         t.addChild(name='status',attrs={'code':'307'})
         self.jabber.send(m)
         #print self.users[conn.fromjid]
@@ -836,9 +888,9 @@ class Transport:
         nick = unicode(event.source().split('!')[0],conn.charset,'replace')
         channel = event.target().lower()
         if len(event.arguments())==2:
-            line = colourparse(event.arguments()[1],conn.charset)
+            line,xhtml = colourparse(event.arguments()[1],conn.charset)
         else:
-            line = colourparse(event.arguments()[0],conn.charset)
+            line,xhtml = colourparse(event.arguments()[0],conn.charset)
         m = Message(to=conn.fromjid,frm = '%s%%%s@%s/%s' % (event.arguments()[0].lower(),conn.server,hostname,nick), typ='groupchat', subject = line)
         self.jabber.send(m)
         
@@ -890,12 +942,16 @@ class Transport:
         if irclib.is_channel(event.target()):
             type = 'groupchat'
             room = '%s%%%s' %(event.target().lower(),conn.server)
-            m = Message(to=conn.fromjid,body=colourparse(event.arguments()[0].lower(),conn.charset),typ=type,frm='%s@%s/%s' %(room, hostname,nick))
+            line,xhtml = colourparse(event.arguments()[0].lower(),conn.charset)
+            print (line,xhtml)
+            m = Message(to=conn.fromjid,body= line,typ=type,frm='%s@%s/%s' %(room, hostname,nick),payload = [xhtml])
         else:
             type = 'chat'
             name = event.source()
             name = '%s%%%s' %(nick,conn.server)
-            m = Message(to=conn.fromjid,body=colourparse(event.arguments()[0].lower(),conn.charset),typ=type,frm='%s@%s' %(name, hostname))
+            line,xhtml = colourparse(event.arguments()[0].lower(),conn.charset)
+            print (line,xhtml)
+            m = Message(to=conn.fromjid,body= line,typ=type,frm='%s@%s' %(name, hostname),payload = [xhtml])
         #print m.__str__()
         self.jabber.send(m)                     
      
@@ -905,8 +961,8 @@ class Transport:
             if irclib.is_channel(event.target()):
                 type = 'groupchat'
                 room = '%s%%%s' %(event.target().lower(),conn.server)
-                
-                m = Message(to=conn.fromjid,body='/me '+colourparse(event.arguments()[1],conn.charset),typ=type,frm='%s@%s/%s' %(room, hostname,nick))
+                line,xhtml = colourparse('/me '+event.arguments()[1],conn.charset)
+                m = Message(to=conn.fromjid,body=line,typ=type,frm='%s@%s/%s' %(room, hostname,nick),payload =[xhtml])
             else:
                 type = 'chat'
                 name = event.source()
@@ -914,7 +970,8 @@ class Transport:
                     name = '%s%%%s' %(nick,conn.server)
                 except:
                     name = '%s%%%s' %(conn.server,conn.server)
-                m = Message(to=conn.fromjid,body='/me '+colourparse(event.arguments()[1],conn.charset),typ=type,frm='%s@%s' %(name, hostname))
+                line,xhtml = colourparse('/me '+event.arguments()[1],conn.charset)
+                m = Message(to=conn.fromjid,body= line,typ=type,frm='%s@%s' %(name, hostname),payload = [xhtml])
             #print m.__str__()
             self.jabber.send(m) 
         elif event.arguments()[0] == 'VERSION':
