@@ -269,7 +269,7 @@ class Transport:
     #XMPP Handlers
     def xmpp_presence(self, con, event):
         # Add ACL support
-        fromjid = event.getFrom().getStripped()
+        fromjid = str(event.getFrom())
         fromstripped = fromjid.encode('utf-8')
         type = event.getType()
         if type == None: type = 'available'
@@ -317,25 +317,25 @@ class Transport:
                 self.jabber.send(Error(event,ERR_FEATURE_NOT_IMPLEMENTED))
         elif to == hostname:
             if type == 'subscribe':
-                if userfile.has_key(fromstripped):
+                if userfile.has_key(event.getFrom().getStripped().encode('utf8')):
                     self.jabber.send(Presence(to=fromjid, frm = to, typ = 'subscribed'))
-                    conf = userfile[fromstripped]
+                    conf = userfile[event.getFrom().getStripped().encode('utf8')]
                     conf['usubscribed']=True
-                    userfile[fromstripped]=conf
+                    userfile[event.getFrom().getStripped().encode('utf8')]=conf
                 else:
                     self.jabber.send(Error(event,ERR_BAD_REQUEST))
             elif type == 'subscribed':
-                if userfile.has_key(fromstripped):
-                    conf = userfile[fromstripped]
+                if userfile.has_key(event.getFrom().getStripped().encode('utf8')):
+                    conf = userfile[event.getFrom().getStripped().encode('utf8')]
                     conf['subscribed']=True
-                    userfile[fromstripped]=conf
+                    userfile[event.getFrom().getStripped().encode('utf8')]=conf
                 else:
                     self.jabber.send(Error(event,ERR_BAD_REQUEST))
             #
             #Add code so people can see transport presence here
             #
             elif type == 'probe':
-                if not userfile.has_key(fromstripped):
+                if not userfile.has_key(event.getFrom().getStripped().encode('utf8')):
                     self.jabber.send(Presence(to=fromjid, frm=to, typ = 'unsubscribe'))
                     self.jabber.send(Presence(to=fromjid, frm=to, typ = 'unsubscribed'))
         else:
@@ -352,7 +352,7 @@ class Transport:
                     
     def xmpp_message(self, con, event):
         type = event.getType()
-        fromjid = event.getFrom().getStripped()
+        fromjid = str(event.getFrom())
         to = event.getTo()
         room = to.getNode().lower()
         try:
@@ -694,7 +694,7 @@ class Transport:
         try:
             c=self.irc.server().connect(server,6667,nick,localaddress=localaddress)
             c.fromjid = fromjid
-            fromstripped = fromjid.encode('utf-8')
+            fromstripped = JID(fromjid).getStripped().encode('utf-8')
             c.joinchan = channel
             c.memberlist = {}
             c.chanmode = {}
