@@ -320,7 +320,12 @@ class Transport:
         if type == 'groupchat':
             if irclib.is_channel(channel):
                 if (event.getSubject() != '') and (event.getSubject() != None):
-                    self.irc_settopic(self.users[fromjid][server],channel,event.getSubject())
+                    if (self.users[fromjid][server].chanmodes['topic']==True and self.users[fromjid][server].memberlist[self.users[fromjid][server].nickname]['role'] == 'moderator') or self.users[fromjid][server].chanmodes['topic']==False:
+                        self.irc_settopic(self.users[fromjid][server],channel,event.getSubject())
+                    else:
+                        m = xmpp.protocol.Message(to=event.getFrom(), frm=event.getTo(), typ='error', subject=event.getSubject())
+                        m.setError('500','Illegal request') # wrong error but hey. :)
+                        self.jabber.send(m)
                 elif event.getBody() != '':
                     if event.getBody()[0:3] == '/me':
                         self.irc_sendctcp('ACTION',self.users[fromjid][server],channel,event.getBody()[4:])
