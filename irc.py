@@ -43,7 +43,8 @@ def irc_add_conn(con):
 def irc_del_conn(con):
     #print "Have:" ,socketlist
     #print "Deleting:", con
-    del socketlist[con]
+    if socketlist.has_key(con):
+        del socketlist[con]
     #print "Now have:", socketlist
 
 #def irclib.irc_lower(nick):
@@ -238,7 +239,9 @@ class Transport:
                 else:
                     if self.users[fromjid].has_key(server):
                         if self.users[fromjid][server].memberlist.has_key(channel):
-                            pass # This is the nickname change case -- need to do something with this.
+                            #pass # This is the nickname change case -- need to do something with this.
+                            self.users[fromjid][server].joinchan = channel
+                            self.irc_sendnick(self.users[fromjid][server],nick)
                         elif self.users[fromjid].has_key(server): # if user already has a session open on same server
                             self.irc_newroom(self.users[fromjid][server],channel)
                     else: # the other cases
@@ -248,13 +251,16 @@ class Transport:
         elif type == 'unavailable':
             if self.users.has_key(fromjid):
                 if self.users[fromjid].has_key(server):
-                    if self.users[fromjid][server].memberlist.has_key(channel):
-                        connection = self.users[fromjid][server]
-                        self.irc_leaveroom(connection,channel)
-                        del self.users[fromjid][server].memberlist[channel]
-                        #del self.users[fromjid][0][(channel,server)]
-                        #need to add server connection tidying
-                        self.test_inuse(connection)
+                    if event.getTo().getResource() == self.users[fromjid][server].nickname:
+                        if self.users[fromjid][server].memberlist.has_key(channel):
+                            connection = self.users[fromjid][server]
+                            self.irc_leaveroom(connection,channel)
+                            del self.users[fromjid][server].memberlist[channel]
+                            #del self.users[fromjid][0][(channel,server)]
+                            #need to add server connection tidying
+                            self.test_inuse(connection)
+                    else:
+                        self.jabber.send(Error(event,ERR_BAD_REQUEST))
         else:
             self.jabber.send(Error(event,ERR_FEATURE_NOT_IMPLEMENTED))
             
@@ -523,14 +529,18 @@ class Transport:
                     self.users[fromjid][server].mode(channel,'%s%s' % (typ,cmd))
                               
                     #IRC methods
-    def irc_doquit(self,connection):
-        server = connection.server
-        nickname = connection.nickname
-        del self.users[connection.fromjid][server]
-        connection.close()
+    def irc_doquit(self,con):
+        server = con.server
+        nickname = con.nickname
+        if self.users[con.fromjid].has_key(server):
+            del self.users[con.fromjid][server]
+            con.close()
         
     def irc_settopic(self,connection,channel,line):
         connection.topic(channel.encode(charset),line.encode(charset))
+    
+    def irc_sendnick(self,connection,nick):
+        connection.nick(nick)
     
     def irc_sendroom(self,connection,channel,line):
         lines = line.split('/n')
@@ -594,6 +604,8 @@ class Transport:
     def irc_nick(self, conn, event):
         old = irclib.nm_to_n(event.source())
         new = event.target()
+        if old == conn.nickname:
+            conn.nickname = new
         for each in conn.memberlist.keys():
             if old in conn.memberlist[each].keys():
                 m = Presence(to=conn.fromjid,typ = 'unavailable',frm = '%s%%%s@%s/%s' % (each,conn.server,hostname,old))
@@ -613,9 +625,9 @@ class Transport:
         del conn.joinchan
     
     def irc_nicknameinuse(self,conn,event):
-        if conn.joinchan:
-            error=ErrorNode(ERR_CONFLICT,text='Nickname is in use')
-            self.jabber.send(Error(Presence(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' %(conn.joinchan, conn.server, hostname)),error,reply=0))
+        #if conn.joinchan:
+        error=ErrorNode(ERR_CONFLICT,text='Nickname is in use')
+        self.jabber.send(Error(Presence(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' %(conn.joinchan, conn.server, hostname)),error,reply=0))
             
     def irc_nosuchchannel(self,conn,event):
         error=ErrorNode(ERR_ITEM_NOT_FOUND,'The channel is not found')
