@@ -1,0 +1,85 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <meta content="text/html; charset=ISO-8859-1"
+ http-equiv="content-type">
+  <title>IRC-Transport-Howtouse</title>
+</head>
+<body>
+<h1>How to use the IRC transport.</h1>
+<br>
+The IRC transport is a dynamic gateway that allows XMPP/Jabber users to
+connect to IRC using their Groupchat &amp; MUC clients. <br>
+<h2>Features</h2>
+<ul>
+  <li>Every
+IRC network should be supported.</li>
+  <li>A user can have many rooms open
+on different networks.</li>
+  <li>Your nick name must be the same on all channels on one irc
+server, but can be different when using another irc server.<br>
+  </li>
+</ul>
+<h2>Limitations</h2>
+<ul>
+  <li>When using the IRC transport trying to discover rooms using a
+service
+browser is not currently implemented.</li>
+  <li>Groupchat clients will only get basic chat support. All advanced
+features are only supported in MUC clients.<br>
+  </li>
+</ul>
+<h2>Joining a room</h2>
+To open a room you will need the irc channel name and the irc server
+name. For our example we will use the channel <span
+ style="font-style: italic;">#debian</span> in server <span
+ style="font-style: italic;">irc.debian.org</span>.&nbsp;
+<br>
+<br>
+To connect to an irc channel in your XMPP client you will take the irc
+channel and irc server and combine them together to form an XMPP room
+name. To do this you need to add the channel and
+server names together using a % as a seperator. For our example you
+would use <span style="font-style: italic;">#debian%irc.debian.org</span>
+as the room name in your XMPP client. You can then enter the transport
+name that your
+XMPP or Jabber server supplies, eg <span style="font-style: italic;">irc.jabber.org.uk</span>,
+as well as your nickname.&nbsp; The
+nickname has to be unique not only on the channel you are joining
+(<span style="font-style: italic;">#debian</span> in our example) but
+also on the irc server (<span style="font-style: italic;">irc.debian.org</span>).<span
+ style="background-color: rgb(255, 0, 0);"></span><br>
+<br>
+If you open more than one room to the same server they must have the
+same nickname, so if I were <span style="font-style: italic;">mikea </span>on
+<span style="font-style: italic;">#debian%irc.debian.org</span>, I
+would
+also need to be <span style="font-style: italic;">mikea </span>on <span
+ style="font-style: italic;">#test%irc.debian.org. </span>If you try
+and open <span style="font-style: italic;">#test%irc.debian.org</span>
+while logged on already the transport will use your old name, and
+change your new name to match it.<br>
+<br>
+If&nbsp; you choose a name that is already in use then the will return
+an error.<br>
+<br>
+<h2>IRC emote and commands</h2>
+None of the special irc commands other than '<span
+ style="font-style: italic;">/me</span>' work. All will be
+relayed to the channel. <span style="background-color: rgb(255, 0, 0);"></span><br>
+<br>
+<h2>Private Messages</h2>
+Private messages sent to a member of a room will be returned as a
+network user. If you try and chat to me as <span
+ style="font-style: italic;">mikea </span>in room
+<span style="font-style: italic;">#debian%irc.debian.org</span> then
+you will get the responce from
+<span style="font-style: italic;">mikea%irc.debian.org</span> as
+private messages in IRC are network based not room based.<span
+ style="background-color: rgb(255, 0, 0);"></span><br>
+<br>
+<h2>Mode changes</h2>
+All mode changes are supported only by the MUC interface.<br>
+<br>
+</body>
+</html>
