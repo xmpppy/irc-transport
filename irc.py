@@ -7,7 +7,7 @@
 # This program is free software licensed with the GNU Public License Version 2.
 # For a full copy of the license please go here http://www.gnu.org/licenses/licenses.html#GPL
 
-import xmpp, urllib2, sys, time, irclib, re, ConfigParser, os, select
+import xmpp, urllib2, sys, time, irclib, re, ConfigParser, os, select, codecs, shelve
 from xmpp.protocol import *
 from xmpp.features import *
 
@@ -30,6 +30,7 @@ charset = 'utf-8'
 #port = 9000
 #secret = 'secret'
 socketlist = {}
+timerlist = []
 
 MALFORMED_JID=ErrorNode(ERR_JID_MALFORMED,text='Invalid JID, must be in form #room%server@transport')
 NS_MUC = 'http://jabber.org/protocol/muc'
@@ -147,7 +148,7 @@ def colourparse(str):
     try:
         s = unicode(s,'utf8','strict') # Language detection stuff should go here.
     except:
-        s = unicode(s, charset)
+        s = unicode(s, charset,'replace')
     return s
   
   
@@ -201,6 +202,7 @@ class Transport:
         self.irc.add_global_handler('topic',self.irc_topic)
         self.irc.add_global_handler('nicknameinuse',self.irc_nicknameinuse)
         self.irc.add_global_handler('nosuchchannel',self.irc_nosuchchannel)
+        self.irc.add_global_handler('nosuchnick',self.irc_nosuchnick)
         self.irc.add_global_handler('notregistered',self.irc_notregistered)
         self.irc.add_global_handler('welcome',self.irc_welcome)
         self.jabber.RegisterHandler('message',self.xmpp_message)
@@ -212,11 +214,14 @@ class Transport:
         self.jabber.RegisterHandler('iq',self.xmpp_iq_browse,typ = 'get', ns=NS_BROWSE)
         self.jabber.RegisterHandler('iq',self.xmpp_iq_mucadmin_set,typ = 'set', ns=NS_MUC_ADMIN)
         self.jabber.RegisterHandler('iq',self.xmpp_iq_mucadmin_get,typ = 'get', ns=NS_MUC_ADMIN)
+        self.jabber.RegisterHandler('iq',self.xmpp_iq_register_set,typ = 'set', ns=NS_REGISTER)
+        self.jabber.RegisterHandler('iq',self.xmpp_iq_register_get,typ = 'get', ns=NS_REGISTER)
 #        self.jabber.RegisterDisconnectHandler(self.xmpp_disconnect)
     #XMPP Handlers
     def xmpp_presence(self, con, event):
         # Add ACL support
         fromjid = event.getFrom().getStripped()
+        fromstripped = fromjid.encode('utf-8')
         type = event.getType()
         if type == None: type = 'available'
         to = event.getTo()
@@ -226,44 +231,55 @@ class Transport:
             channel, server = room.split('%')
         except ValueError:
             channel=''
-        if not irclib.is_channel(channel):
-            self.jabber.send(Error(event,MALFORMED_JID))
-            return
-        if type == 'available':
-            #print nick
-            if nick != '':
-                if not self.users.has_key(fromjid): # if a new user session
-                    c=self.irc_newconn(channel,server,nick,fromjid)
-                    if c != None:
-                        self.users[fromjid] = {server:c}
-                else:
-                    if self.users[fromjid].has_key(server):
-                        if self.users[fromjid][server].memberlist.has_key(channel):
-                            #pass # This is the nickname change case -- need to do something with this.
-                            self.users[fromjid][server].joinchan = channel
-                            self.irc_sendnick(self.users[fromjid][server],nick)
-                        elif self.users[fromjid].has_key(server): # if user already has a session open on same server
-                            self.irc_newroom(self.users[fromjid][server],channel)
-                    else: # the other cases
+        if irclib.is_channel(channel):
+            if type == 'available':
+                #print nick
+                if nick != '':
+                    if not self.users.has_key(fromjid): # if a new user session
                         c=self.irc_newconn(channel,server,nick,fromjid)
                         if c != None:
-                            self.users[fromjid][server]=c
-        elif type == 'unavailable':
-            if self.users.has_key(fromjid):
-                if self.users[fromjid].has_key(server):
-                    if event.getTo().getResource() == self.users[fromjid][server].nickname:
-                        if self.users[fromjid][server].memberlist.has_key(channel):
-                            connection = self.users[fromjid][server]
-                            self.irc_leaveroom(connection,channel)
-                            del self.users[fromjid][server].memberlist[channel]
-                            #del self.users[fromjid][0][(channel,server)]
-                            #need to add server connection tidying
-                            self.test_inuse(connection)
+                            self.users[fromjid] = {server:c}
                     else:
-                        self.jabber.send(Error(event,ERR_BAD_REQUEST))
+                        if self.users[fromjid].has_key(server):
+                            if self.users[fromjid][server].memberlist.has_key(channel):
+                                #pass # This is the nickname change case -- need to do something with this.
+                                self.users[fromjid][server].joinchan = channel
+                                self.irc_sendnick(self.users[fromjid][server],nick)
+                            elif self.users[fromjid].has_key(server): # if user already has a session open on same server
+                                self.irc_newroom(self.users[fromjid][server],channel)
+                        else: # the other cases
+                            c=self.irc_newconn(channel,server,nick,fromjid)
+                            if c != None:
+                                self.users[fromjid][server]=c
+            elif type == 'unavailable':
+                if self.users.has_key(fromjid):
+                    if self.users[fromjid].has_key(server):
+                        if event.getTo().getResource() == self.users[fromjid][server].nickname:
+                            if self.users[fromjid][server].memberlist.has_key(channel):
+                                connection = self.users[fromjid][server]
+                                self.irc_leaveroom(connection,channel)
+                                del self.users[fromjid][server].memberlist[channel]
+                                #del self.users[fromjid][0][(channel,server)]
+                                #need to add server connection tidying
+                                self.test_inuse(connection)
+                        else:
+                            self.jabber.send(Error(event,ERR_BAD_REQUEST))
+            else:
+                self.jabber.send(Error(event,ERR_FEATURE_NOT_IMPLEMENTED))
+        elif to == hostname:
+            if type == 'subscribe':
+                self.jabber.send(Presence(to=fromjid, frm = to, type = 'subscribed'))
+                conf = userfile[fromstripped]
+                conf['usubscribed']=True
+                userfile[fromstripped]=conf
+            elif type == 'subscribed':
+                conf = userfile[fromstripped]
+                conf['subscribed']=True
+                userfile[fromstripped]=conf
         else:
-            self.jabber.send(Error(event,ERR_FEATURE_NOT_IMPLEMENTED))
-            
+            self.jabber.send(Error(event,MALFORMED_JID))
+            return
+                
     def test_inuse(self,connection):
         inuse = False
         for each in self.users[connection.fromjid].keys():
@@ -327,7 +343,7 @@ class Transport:
         fromjid = event.getFrom()
         to = event.getTo()
         id = event.getID()
-        m = Iq(to=fromjid,frm=to, typ='result', queryNS=NS_DISCO_INFO, payload=[Node('identity',attrs={'category':'conference','type':'irc','name':'IRC Transport'}),Node('feature',attrs={'var':NS_MUC})])
+        m = Iq(to=fromjid,frm=to, typ='result', queryNS=NS_DISCO_INFO, payload=[Node('identity',attrs={'category':'conference','type':'irc','name':'IRC Transport'}),Node('feature', attrs={'var':xmpp.NS_REGISTER}),Node('feature',attrs={'var':NS_MUC})])
         m.setID(id)
         self.jabber.send(m)
         #raise xmpp.NodeProcessed
@@ -354,7 +370,7 @@ class Transport:
             m.setTagAttr('query','name','xmpp IRC Transport')
             m.setTagAttr('query','type','irc')
             m.setTagAttr('query','jid','hostname')
-            m.setPayload([Node('ns',payload=NS_MUC)])
+            m.setPayload([Node('ns',payload=NS_MUC),Node('ns',payload=xmpp.NS_REGISTER)])
         self.jabber.send(m)
         #raise xmpp.NodeProcessed
     
@@ -528,7 +544,50 @@ class Transport:
                 if not val:    
                     self.users[fromjid][server].mode(channel,'%s%s' % (typ,cmd))
                               
-                    #IRC methods
+    # Registration code
+    def xmpp_iq_register_get(self, con, event):
+        charset = ''
+        fromjid = event.getFrom().getStripped().encode('utf8')
+        if userfile.has_key(fromjid):
+            charset = userfile[fromjid]['charset']
+        m = event.buildReply('result')
+        m.setQueryNS(NS_REGISTER)
+        m.setQueryPayload([Node('instructions', payload = 'Please provide your legacy Character set or codepage. (eg cp437, cp1250, iso-8859-1, koi8-r)'),Node('charset',payload=charset)])
+        self.jabber.send(m)          
+                        
+    def xmpp_iq_register_set(self, con, event):
+        remove = False
+        fromjid = event.getFrom().getStripped().encode('utf8')
+        for each in event.getQueryPayload():
+            if each.getName() == 'charset':
+                charset = each.getData()
+            elif each.getName() == 'remove':
+                remove = True
+        if not remove:
+            if userfile.has_key(fromjid):
+                conf = userfile[fromjid]
+            else:
+                conf = {}
+            try:
+                codecs.getdecoder(charset)
+            except LookupError:
+                self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
+                return
+            conf['charset']=charset
+            userfile[fromjid]=conf
+            self.jabber.send(Presence(to=event.getFrom(), frm = event.getTo()))
+            if not conf.has_key('subscribed'):
+                self.jabber.send(Presence(typ='subscribe',to=fromjid, frm=hostname))
+        else:
+            del userfile[fromjid]
+            m = event.buildReply('result')
+            self.jabber.send(m)
+            m = Presence(to = event.getFrom(), frm = hostname, typ = 'unsubscribe')
+            self.jabber.send(m)
+            m = Presence(to = event.getFrom(), frm = hostname, typ = 'unsubscribed')
+            self.jabber.send(m)
+            
+    #IRC methods
     def irc_doquit(self,con):
         server = con.server
         nickname = con.nickname
@@ -537,7 +596,7 @@ class Transport:
             con.close()
         
     def irc_settopic(self,connection,channel,line):
-        connection.topic(channel.encode(charset),line.encode(charset))
+        connection.topic(channel.encode(connection.charset),line.encode(connection.charset))
     
     def irc_sendnick(self,connection,nick):
         connection.nick(nick)
@@ -546,21 +605,26 @@ class Transport:
         lines = line.split('/n')
         for each in lines:
             #print channel, each
-            connection.privmsg(channel.encode(charset),each.encode(charset))
+            connection.privmsg(channel.encode(connection.charset),each.encode(connection.charset))
 
     def irc_sendctcp(self,type,connection,channel,line):
         lines = line.split('/n')
         for each in lines:
             #print channel, each
-            connection.ctcp(type,channel.encode(charset),each.encode(charset))
+            connection.ctcp(type,channel.encode(connection.charset),each.encode(connection.charset))
 
     def irc_newconn(self,channel,server,nick,fromjid):
         try:
             c=self.irc.server().connect(server,6667,nick,localaddress=localaddress)
             c.fromjid = fromjid
+            fromstripped = fromjid.encode('utf-8')
             c.joinchan = channel
             c.memberlist = {}
             c.chanmode = {}
+            if userfile.has_key(fromstripped):
+                c.charset = userfile[fromstripped]['charset']
+            else:
+                c.charset = charset
             #c.join(channel)
             #c.who(channel) 
             return c
@@ -636,6 +700,10 @@ class Transport:
     def irc_notregistered(self,conn,event):
         error=ErrorNode(ERR_FORBIDDEN,text='Not registered and registration is not supported')
         self.jabber.send(Presence(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' %(conn.joinchan, conn.server, hostname)),error)
+    
+    def irc_nosuchnick(self, conn, event):
+        error=ErrorNode(ERR_ITEM_NOT_FOUND,text='Nickname not found')
+        self.jabber.send(Message(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' % (event.source(), conn.server, hostname)),error)
     
     def irc_mode(self,conn,event):
         #modelist = irclib.parse_channel_modes(event.arguments())
@@ -734,7 +802,7 @@ class Transport:
         self.test_inuse(conn)
         
     def irc_topic(self,conn,event):
-        nick = event.source().split('!')[0]
+        nick = unicode(event.source().split('!')[0],conn.charset,'replace')
         channel = event.target().lower()
         if len(event.arguments())==2:
             line = colourparse(event.arguments()[1])
@@ -746,7 +814,7 @@ class Transport:
     def irc_join(self,conn,event):
         type = 'available'
         name = '%s%%%s' % (irclib.irc_lower(event.target()), conn.server)
-        nick = irclib.nm_to_n(event.source())
+        nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
         if nick not in conn.memberlist[irclib.irc_lower(event.target())].keys():
             conn.memberlist[irclib.irc_lower(event.target())][nick]={'affiliation':'none','role':'none'}
         m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname, nick))
@@ -757,7 +825,7 @@ class Transport:
       
     def irc_whoreply(self,conn,event):
         name = '%s%%%s' % (event.arguments()[0].lower(), conn.server)
-        faddr = '%s@%s/%s' % (name, hostname, event.arguments()[4])
+        faddr = '%s@%s/%s' % (name, hostname, unicode(event.arguments()[4],conn.charset,'replace'))
         m = Presence(to=conn.fromjid,typ='available',frm=faddr)
         t = m.addChild(name='x', namespace=NS_MUC_USER)
         affiliation = 'none'
@@ -776,8 +844,8 @@ class Transport:
         p=t.addChild(name='item',attrs={'affiliation':affiliation,'role':role})
         self.jabber.send(m)
         try:
-            if (event.arguments()[0] != '*') and (event.arguments()[4] not in conn.memberlist[event.arguments()[0].lower()].keys()):
-                conn.memberlist[event.arguments()[0].lower()][event.arguments()[4]]={'affiliation':affiliation,'role':role}
+            if (event.arguments()[0] != '*') and (unicode(event.arguments()[4],conn.charset,'replace') not in conn.memberlist[event.arguments()[0].lower()].keys()):
+                conn.memberlist[event.arguments()[0].lower()][unicode(event.arguments()[4],conn.charset,'replace')]={'affiliation':affiliation,'role':role}
         except KeyError:
             pass
         #conn.mode(event.arguments()[4],'')
@@ -785,7 +853,7 @@ class Transport:
         
     def irc_message(self,conn,event):
         try:
-            nick = irclib.nm_to_n(event.source())
+            nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
         except:
             nick = conn.server
         if irclib.is_channel(event.target()):
@@ -801,7 +869,7 @@ class Transport:
         self.jabber.send(m)                     
      
     def irc_ctcp(self,conn,event):
-        nick = irclib.nm_to_n(event.source())
+        nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
         if event.arguments()[0] == 'ACTION':
             if irclib.is_channel(event.target()):
                 type = 'groupchat'
@@ -833,6 +901,7 @@ class Transport:
             
 import pdb
 if __name__ == '__main__':
+    userfile = shelve.open('user.dbm')
     configfile = ConfigParser.ConfigParser()
     configfile.add_section('transport')
     try:
