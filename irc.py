@@ -1,5 +1,5 @@
 #!/usr/bin/python
-# $Id$
+# $Id$yeah
 #
 # xmpp->IRC transport
 # Jan 2004 Copyright (c) Mike Albon
@@ -8,8 +8,8 @@
 # For a full copy of the license please go here http://www.gnu.org/licenses/licenses.html#GPL
 
 import xmpp, urllib2, sys, time, irclib, re, ConfigParser, os, select
-#from threading import *
 from xmpp.protocol import *
+from xmpp.features import *
 
 #import IPython.ultraTB
 #sys.excepthook = IPython.ultraTB.FormattedTB(mode='Verbose', color_schme="Linux", call_pdb=0)
@@ -32,6 +32,10 @@ charset = 'utf-8'
 socketlist = {}
 
 MALFORMED_JID=ErrorNode(ERR_JID_MALFORMED,text='Invalid JID, must be in form #room%server@transport')
+NS_MUC = 'http://jabber.org/protocol/muc'
+NS_MUC_USER = NS_MUC+'#user'
+NS_MUC_ADMIN = NS_MUC+'#admin'
+NS_MUC_OWNER = NS_MUC+'#owner'
 
 def irc_add_conn(con):
     socketlist[con]='irc'
@@ -148,43 +152,17 @@ def colourparse(str):
   
 def connectxmpp():
     global connection
-    connection = None
     connection = xmpp.client.Component(hostname,port)
-    while not connection.connect((server,port)):
-        time.sleep(10)
-    if connection.auth(hostname,secret):
-        socketlist[connection.Connection._sock]='xmpp'
-        return True
-    else:
-        return False
-        
+    try: connection.auth(hostname,secret)
+    except: pass
+    connection.connect((server,port))
+    while 1:
+        time.sleep(5)
+        connected=connection.reconnectAndReauth()
+        if connected: break
+    connection.UnregisterDisconnectHandler(connection.DisconnectHandler)
+    return connected
 
-class IrcThread(Thread):
-    def __init__(self,irc):
-        Thread.__init__(self)
-        self.irc = irc
-        self.start()
-        
-    def run(self):
-        while 1:
-            try:
-                self.irc.process_forever()
-            except:
-                pass
-    
-class ComponentThread(Thread):
-    def __init__(self,connection):
-        Thread.__init__(self)
-        self.connection = connection
-        self.start()
-        
-    def run(self):
-        while 1:
-            try:
-                self.connection.Process(5)
-            except:
-                pass
-    
 class Transport:
     # This class is the main collection of where all the handlers for both the IRC and Jabber
     
@@ -226,14 +204,14 @@ class Transport:
         self.irc.add_global_handler('welcome',self.irc_welcome)
         self.jabber.RegisterHandler('message',self.xmpp_message)
         self.jabber.RegisterHandler('presence',self.xmpp_presence)
-        self.jabber.RegisterHandler('iq',self.xmpp_iq_discoinfo,typ = 'get', ns='http://jabber.org/protocol/disco#info')
-        self.jabber.RegisterHandler('iq',self.xmpp_iq_discoitems,typ = 'get', ns='http://jabber.org/protocol/disco#items')
-        self.jabber.RegisterHandler('iq',self.xmpp_iq_version,typ = 'get', ns='jabber:iq:version')
-        self.jabber.RegisterHandler('iq',self.xmpp_iq_agents,typ = 'get', ns='jabber:iq:agent')
-        self.jabber.RegisterHandler('iq',self.xmpp_iq_browse,typ = 'get', ns='jabber:iq:browse')
-        self.jabber.RegisterHandler('iq',self.xmpp_iq_mucadmin_set,typ = 'set', ns='http://jabber.org/protocol/muc#admin')
-        self.jabber.RegisterHandler('iq',self.xmpp_iq_mucadmin_get,typ = 'get', ns='http://jabber.org/protocol/muc#admin')
-        self.jabber.RegisterDisconnectHandler(self.xmpp_disconnect)
+        self.jabber.RegisterHandler('iq',self.xmpp_iq_discoinfo,typ = 'get', ns=NS_DISCO_INFO)
+        self.jabber.RegisterHandler('iq',self.xmpp_iq_discoitems,typ = 'get', ns=NS_DISCO_ITEMS)
+        self.jabber.RegisterHandler('iq',self.xmpp_iq_version,typ = 'get', ns=NS_VERSION)
+        self.jabber.RegisterHandler('iq',self.xmpp_iq_agents,typ = 'get', ns=NS_AGENTS)
+        self.jabber.RegisterHandler('iq',self.xmpp_iq_browse,typ = 'get', ns=NS_BROWSE)
+        self.jabber.RegisterHandler('iq',self.xmpp_iq_mucadmin_set,typ = 'set', ns=NS_MUC_ADMIN)
+        self.jabber.RegisterHandler('iq',self.xmpp_iq_mucadmin_get,typ = 'get', ns=NS_MUC_ADMIN)
+#        self.jabber.RegisterDisconnectHandler(self.xmpp_disconnect)
     #XMPP Handlers
     def xmpp_presence(self, con, event):
         # Add ACL support
@@ -338,7 +316,7 @@ class Transport:
         fromjid = event.getFrom()
         to = event.getTo()
         id = event.getID()
-        m = Iq(to=fromjid,frm=to, typ='result', queryNS='http://jabber.org/protocol/disco#info', payload=[Node('identity',attrs={'category':'conference','type':'irc','name':'IRC Transport'}),Node('feature',attrs={'var':'http://jabber.org/protocol/muc'})])
+        m = Iq(to=fromjid,frm=to, typ='result', queryNS=NS_DISCO_INFO, payload=[Node('identity',attrs={'category':'conference','type':'irc','name':'IRC Transport'}),Node('feature',attrs={'var':NS_MUC})])
         m.setID(id)
         self.jabber.send(m)
         #raise xmpp.NodeProcessed
@@ -347,7 +325,7 @@ class Transport:
         fromjid = event.getFrom()
         to = event.getTo()
         id = event.getID()
-        m = Iq(to=fromjid,frm=to, typ='result', queryNS='http://jabber.org/protocol/disco#items')
+        m = Iq(to=fromjid,frm=to, typ='result', queryNS=NS_DISCO_ITEMS)
         m.setID(id)
         self.jabber.send(m)
         #raise xmpp.NodeProcessed
@@ -359,13 +337,13 @@ class Transport:
         #raise xmpp.NodeProcessed
     
     def xmpp_iq_browse(self, con, event):
-        m = Iq(to = event.getFrom(), frm = event.getTo(), typ = 'result', queryNS = 'jabber:iq:browse')
+        m = Iq(to = event.getFrom(), frm = event.getTo(), typ = 'result', queryNS = NS_BROWSE)
         if event.getTo() == hostname:
             m.setTagAttr('query','catagory','conference')
             m.setTagAttr('query','name','xmpp IRC Transport')
             m.setTagAttr('query','type','irc')
             m.setTagAttr('query','jid','hostname')
-            m.setPayload([Node('ns',payload='http://jabber.org/protcol/muc')])
+            m.setPayload([Node('ns',payload=NS_MUC)])
         self.jabber.send(m)
         #raise xmpp.NodeProcessed
     
@@ -373,22 +351,11 @@ class Transport:
         fromjid = event.getFrom()
         to = event.getTo()
         id = event.getID()
-        m = Iq(to = fromjid, frm = to, typ = 'result', queryNS= 'jabber:iq:version',payload=[Node('name',payload='xmpp IRC Transport'), Node('version',payload='early release 12feb04'),Node('os',payload='%s %s %s' % (os.uname()[0],os.uname()[2],os.uname()[4]))])
+        m = Iq(to = fromjid, frm = to, typ = 'result', queryNS=NS_VERSION, payload=[Node('name',payload='xmpp IRC Transport'), Node('version',payload='early release 12feb04'),Node('os',payload='%s %s %s' % (os.uname()[0],os.uname()[2],os.uname()[4]))])
         m.setID(id)
         self.jabber.send(m)
         #raise xmpp.NodeProcessed
     
-    def xmpp_disconnect(self):
-        for each in self.users.keys():
-            for item in self.users[each].keys():
-                self.irc_doquit(item)
-            del self.users[each]
-        #del connection    
-        del socketlist[connection.Connection._sock]
-        while not connectxmpp():
-            time.sleep(5)
-        self.register_handlers()
-            
     def xmpp_iq_mucadmin_get(self, con, event):
         fromjid = event.getFrom()
         to = event.getTo()
@@ -463,8 +430,93 @@ class Transport:
                         self.users[fromjid][server].mode(channel,'%s %s'%('-o',attr['nick']))
                     elif attr['role'] == 'none':
                         self.users[fromjid][server].kick(channel,attr['nick'],'Kicked')#Need to add reason gathering
-                        
-                        
+    
+    def xmpp_iq_mucowner_get(self, con, event):
+        fromjid = event.getFrom()
+        to = event.getTo()
+        room = to.getNode().lower()
+        id = event.getID()
+        try:
+            channel, server = room.split('%')
+        except ValueError:
+            self.jabber.send(Error(event,MALFORMED_JID))
+            return
+        if fromjid not in self.users.keys() \
+          or server not in self.users[fromjid].keys() \
+          or channel not in self.users[fromjid][server].memberlist.keys():
+            self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))
+            return
+        ns = event.getQueryNS()
+        t = event.getQueryPayload()
+        if self.users[fromjid][server].memberlist[self.users[fromjid][server].nick]['role'] != 'moderator' or self.users[fromjid][server].memberlist[self.users[fromjid][server].nick]['affiliation'] != 'owner':
+            self.jabber.send(Error(event,ERR_FORBIDDEN))
+            return
+        datafrm = DataForm(data=self.users[fromjid][server].chanlist[channel])
+        self.jabber.send(Iq(frm = to, to = fromjid, id = id, type='result', queryNS= ns, queryPayload = datafrm))
+        
+    def xmpp_iq_mucowner_set(self, con, event):
+        fromjid = event.getFrom()
+        to = event.getTo()
+        room = to.getNode().lower()
+        id = event.getID()
+        try:
+            channel, server = room.split('%')
+        except ValueError:
+            self.jabber.send(Error(event,MALFORMED_JID))
+            return
+        if fromjid not in self.users.keys() \
+          or server not in self.users[fromjid].keys() \
+          or channel not in self.users[fromjid][server].memberlist.keys():
+            self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))
+            return
+        ns = event.getQueryNS()
+        t = event.getQueryPayload()
+        if self.users[fromjid][server].memberlist[self.users[fromjid][server].nick]['role'] != 'moderator' or self.users[fromjid][server].memberlist[self.users[fromjid][server].nick]['affiliation'] != 'owner':
+            self.jabber.send(Error(event,ERR_FORBIDDEN))
+            return
+        datadrm = event.getQueryPayload()[0].asDict()
+        for each in dataform.keys():
+            if datafrm[each] != self.users[fromjid][server].chanmode[each]:
+                val = False
+                if datafrm[each] == True:
+                    typ='+'
+                else:
+                    typ='-'
+                if each == 'private':
+                    cmd = 'b'
+                elif each == 'secret':
+                    cmd = 's'
+                elif each == 'invite':
+                    cmd = 'i'
+                elif each == 'topic':
+                    cmd = 't'
+                elif each == 'notmember':
+                    cmd = 'n'
+                elif each == 'moderated':
+                    cmd = 'm'
+                elif each == 'banlist':
+                    cmd = 'b'
+                    typ = '+'
+                    val = True
+                    for item in datafrm[each]:
+                        if item not in self.users[fromjid][server].chanmode[each]:
+                            self.users[fromjid][server].mode(channel,'+b %s' % item)
+                    for item in self.users[fromjid][server].chanmode[each]:
+                        if item not in datafrm[each]:
+                            self.users[fromjid][server].mode(channel,'-b %s' % item)
+                elif each == 'limit':
+                    cmd = 'l'
+                    typ = '+'
+                    val = True
+                    self.users[fromjid][server].mode(channel,'+l %s' % each)
+                elif each == 'key':
+                    cmd = 'k'
+                    typ = '+'
+                    val = True
+                    self.users[fromjid][server].mode(channel, '+k %s' % each)
+                if not val:    
+                    self.users[fromjid][server].mode(channel,'%s%s' % (typ,cmd))
+                              
                     #IRC methods
     def irc_doquit(self,connection):
         server = connection.server
@@ -540,7 +592,7 @@ class Transport:
         for each in conn.memberlist.keys():
             if old in conn.memberlist[each].keys():
                 m = Presence(to=conn.fromjid,typ = 'unavailable',frm = '%s%%%s@%s/%s' % (each,conn.server,hostname,old))
-                p = m.addChild(name='x', namespace='http://jabber.org/protocol/muc#user')
+                p = m.addChild(name='x', namespace=NS_MUC_USER)
                 p.addChild(name='item', attrs={'nick':new})
                 p.addChild(name='status', attrs={'code':'303'})
                 self.jabber.send(m)
@@ -578,7 +630,7 @@ class Transport:
                     for each in event.arguments()[1:]:
                         conn.memberlist[event.target().lower()][each]['role']='moderator'
                         m = Presence(to=conn.fromjid,typ='available',frm = '%s/%s' %(faddr,each))
-                        t = m.addChild(name='x',namespace='http://jabber.org/protocol/muc#user')
+                        t = m.addChild(name='x',namespace=NS_MUC_USER)
                         p = t.addChild(name='item',attrs=conn.memberlist[event.target().lower()][each])
                         self.jabber.send(m)
             elif event.arguments()[0] in ['-o', '-v']:
@@ -587,7 +639,7 @@ class Transport:
                     for each in event.arguments()[1:]:
                         conn.memberlist[event.target().lower()][each]['role']='visitor'
                         m = Presence(to=conn.fromjid,typ='available',frm = '%s/%s' %(faddr,each))
-                        t = m.addChild(name='x',namespace='http://jabber.org/protocol/muc#user')
+                        t = m.addChild(name='x',namespace=NS_MUC_USER)
                         p = t.addChild(name='item',attrs=conn.memberlist[event.target().lower()][each])
                         self.jabber.send(m)
             elif event.arguments()[0] == '+v':
@@ -596,7 +648,7 @@ class Transport:
                     for each in event.arguments()[1:]:
                         conn.memberlist[event.target().lower()][each]['role']='participant'
                         m = Presence(to=conn.fromjid,typ='available',frm = '%s/%s' %(faddr,each))
-                        t = m.addChild(name='x',namespace='http://jabber.org/protocol/muc#user')
+                        t = m.addChild(name='x',namespace=NS_MUC_USER)
                         p = t.addChild(name='item',attrs=conn.memberlist[event.target().lower()][each])
                         self.jabber.send(m)
                     
@@ -653,7 +705,7 @@ class Transport:
         type = 'unavailable'
         name = '%s%%%s' % (irclib.irc_lower(event.target()), conn.server)
         m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,irclib.irc_lower(event.arguments()[0])))
-        t=m.addChild(name='x',namespace='http://jabber.org/protocol/muc#user')
+        t=m.addChild(name='x',namespace=NS_MUC_USER)
         p=t.addChild(name='item',attrs={'affiliation':'none','role':'none'})
         p.addChild(name='reason',payload=[colourparse(event.arguments()[1])])
         t.addChild(name='status',attrs={'code':'307'})
@@ -681,7 +733,7 @@ class Transport:
         if nick not in conn.memberlist[irclib.irc_lower(event.target())].keys():
             conn.memberlist[irclib.irc_lower(event.target())][nick]={'affiliation':'none','role':'none'}
         m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname, nick))
-        t=m.addChild(name='x',namespace='http://jabber.org/protocol/muc#user')
+        t=m.addChild(name='x',namespace=NS_MUC_USER)
         p=t.addChild(name='item',attrs={'affiliation':'none','role':'visitor'})
         #print m.__str__()
         self.jabber.send(m)
@@ -690,7 +742,7 @@ class Transport:
         name = '%s%%%s' % (event.arguments()[0].lower(), conn.server)
         faddr = '%s@%s/%s' % (name, hostname, event.arguments()[4])
         m = Presence(to=conn.fromjid,typ='available',frm=faddr)
-        t = m.addChild(name='x', namespace='http://jabber.org/protocol/muc#user')
+        t = m.addChild(name='x', namespace=NS_MUC_USER)
         affiliation = 'none'
         role = 'none'
         if '@' in event.arguments()[5]:
@@ -752,6 +804,17 @@ class Transport:
         elif event.arguments()[0] == 'VERSION':
             self.irc_sendctcp('VERSION',conn,event.source(),'xmpp IRC Transport')
 
+    def xmpp_disconnect(self):
+        for each in self.users.keys():
+            for item in self.users[each].keys():
+                self.irc_doquit(item)
+            del self.users[each]
+        #del connection    
+        while not connection.reconnectAndReauth():
+            time.sleep(5)
+#        self.register_handlers()
+            
+import pdb
 if __name__ == '__main__':
     configfile = ConfigParser.ConfigParser()
     configfile.add_section('transport')
@@ -774,10 +837,11 @@ if __name__ == '__main__':
     #connection = xmpp.client.Component(hostname,port)
     #connection.connect((server,port))
     #connection.auth(hostname,secret)
-    while not connectxmpp():
-        time.sleep(5)
+    if not connectxmpp():
+        print "Password mismatch!"
+        sys.exit(1)
     ircobj = irclib.IRC(fn_to_add_socket=irc_add_conn,fn_to_remove_socket=irc_del_conn)
-    #socketlist[connection.Connection._sock]='xmpp'
+    socketlist[connection.Connection._sock]='xmpp'
     #jabber = ComponentThread(connection)
     #irc = IrcThread(ircobj)
     transport = Transport(connection,ircobj)
@@ -786,7 +850,10 @@ if __name__ == '__main__':
         for each in i:
             if socketlist[each] == 'xmpp':
                 #connection.Connection.receive()
-                connection.Process(0)
+#                pdb.run("connection.Process(0)")
+#                print 1
+                connection.Process(1)
+                if not connection.isConnected():  transport.xmpp_disconnect()
+#                print '=========================='
             else:
                 ircobj.process_data([each])
-                
