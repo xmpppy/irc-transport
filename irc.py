@@ -416,7 +416,7 @@ class Transport:
         m = Iq(to=fromjid,frm=to, typ='result', queryNS=NS_DISCO_INFO, payload=[Node('identity',attrs={'category':'conference','type':'irc','name':'IRC Transport'}),Node('feature', attrs={'var':xmpp.NS_REGISTER}),Node('feature',attrs={'var':NS_MUC})])
         m.setID(id)
         self.jabber.send(m)
-        #raise xmpp.NodeProcessed
+        raise xmpp.NodeProcessed
 
     def xmpp_iq_discoitems(self, con, event):
         fromjid = event.getFrom()
@@ -425,14 +425,14 @@ class Transport:
         m = Iq(to=fromjid,frm=to, typ='result', queryNS=NS_DISCO_ITEMS)
         m.setID(id)
         self.jabber.send(m)
-        #raise xmpp.NodeProcessed
+        raise xmpp.NodeProcessed
 
 
     def xmpp_iq_agents(self, con, event):
         m = Iq(to=event.getFrom(), frm=event.getTo(), typ='result', payload=[Node('agent', attrs={'jid':hostname},payload=[Node('service',payload='irc'),Node('name',payload='xmpp IRC Transport'),Node('groupchat')])])
         m.setID(event.getID())
         self.jabber.send(m)
-        #raise xmpp.NodeProcessed
+        raise xmpp.NodeProcessed
 
     def xmpp_iq_browse(self, con, event):
         m = Iq(to = event.getFrom(), frm = event.getTo(), typ = 'result', queryNS = NS_BROWSE)
@@ -443,7 +443,7 @@ class Transport:
             m.setTagAttr('query','jid','hostname')
             m.setPayload([Node('ns',payload=NS_MUC),Node('ns',payload=xmpp.NS_REGISTER)])
         self.jabber.send(m)
-        #raise xmpp.NodeProcessed
+        raise xmpp.NodeProcessed
 
     def xmpp_iq_version(self, con, event):
         fromjid = event.getFrom()
@@ -631,13 +631,21 @@ class Transport:
 
         fromjid = event.getFrom().getStripped().encode('utf8')
         ucharset = charset
-        for each in event.getQueryPayload():
-            if each.getName() == 'charset':
-                ucharset = each.getData()
-            elif each.getName() == 'remove':
-                remove = True
-            else:
-                self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
+        #for each in event.getQueryPayload():
+        #    if type(each ) == u'':
+        #        pass
+        #    if each.getName() == 'charset':
+        #        ucharset = each.getData()
+        #    elif each.getName() == 'remove':
+        #        remove = True
+        #    else:
+        #        self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
+        if event.getQueryPayload().getTag('remove'):
+        	remove = True
+        elif event.getQueryPayload().getTag('charset'):
+        	ucharset = event.getQueryPayload().getTag('charset')
+        else:
+        	self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
         if not remove:
             if userfile.has_key(fromjid):
                 conf = userfile[fromjid]
@@ -739,7 +747,8 @@ class Transport:
                 m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,event.source().split('!')[0]))
                 self.jabber.send(m)
                 if activitymessages == True:
-                    m = Message(to=conn.fromjid, typ='groupchat',frm='%s@%s' % (name, hostname), body='%s (%s) has quit (%s)' % (nick, irclib.nm_to_uh(event.source()), event.arguments()[0]))
+                    line,xhtml = colourparse(event.arguments()[0],conn.charset)
+                    m = Message(to=conn.fromjid, typ='groupchat',frm='%s@%s' % (name, hostname), body='%s (%s) has quit (%s)' % (nick, irclib.nm_to_uh(event.source()), line))
                     self.jabber.send(m)
 
     def irc_nick(self, conn, event):
