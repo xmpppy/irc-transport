@@ -1,0 +1,46 @@
+#! /bin/sh
+#
+# This file was automatically customized by debmake on Thu, 20 Feb 1997 17:33:12 +0100
+#
+# Written by Miquel van Smoorenburg <miquels@drinkel.ow.org>.
+# Modified for Debian GNU/Linux by Ian Murdock <imurdock@gnu.ai.mit.edu>.
+# Modified for Debian by Christoph Lameter <clameter@debian.org>.
+# Modified for Debian GNU/Linux by Martin Schulze <joey@infodrom.north.de>.
+
+PATH=/bin:/usr/bin:/sbin:/usr/sbin
+DAEMON=/usr/bin/python
+PIDFILE=/home/snake/python/xmpppy/irc-transport/irc.pid
+USER=snake
+
+# Arguments to atd
+#
+ARGS=/home/snake/python/xmpppy/irc-transport/irc.py
+
+test -x $DAEMON || exit 0
+
+case "$1" in
+  start)
+    echo -n "Starting python-xmpp-irc transport: xmpp-irc"
+    start-stop-daemon --start --quiet --background --pidfile $PIDFILE --user $USER --exec $DAEMON -- $ARGS
+    echo "."
+    ;;
+  stop)
+    echo -n "Stopping python-xmpp-irc transport: xmpp-irc"
+    start-stop-daemon --stop --quiet --pidfile $PIDFILE --exec $DAEMON
+    echo "."
+    ;;
+  reload)
+    echo "Not implemented."
+    ;;
+  force-reload|restart)
+    sh $0 stop
+    sh $0 start
+    ;;
+  *)
+    echo "Usage: /etc/init.d/xmpp-irc {start|stop|restart|force-reload|reload}"
+    exit 1
+    ;;
+esac
+
+exit 0
+
