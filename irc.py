@@ -54,7 +54,7 @@ def irc_del_conn(con):
     #nick=nick.replace('\\','|')
     #return nick
 
-def colourparse(str):
+def colourparse(str,charset):
     # Each tuple consists of String, foreground, background, bold.
     foreground=None
     background=None
@@ -792,7 +792,7 @@ class Transport:
         m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,irclib.irc_lower(event.arguments()[0])))
         t=m.addChild(name='x',namespace=NS_MUC_USER)
         p=t.addChild(name='item',attrs={'affiliation':'none','role':'none'})
-        p.addChild(name='reason',payload=[colourparse(event.arguments()[1])])
+        p.addChild(name='reason',payload=[colourparse(event.arguments()[1],conn.charset)])
         t.addChild(name='status',attrs={'code':'307'})
         self.jabber.send(m)
         #print self.users[conn.fromjid]
@@ -805,9 +805,9 @@ class Transport:
         nick = unicode(event.source().split('!')[0],conn.charset,'replace')
         channel = event.target().lower()
         if len(event.arguments())==2:
-            line = colourparse(event.arguments()[1])
+            line = colourparse(event.arguments()[1],conn.charset)
         else:
-            line = colourparse(event.arguments()[0])
+            line = colourparse(event.arguments()[0],conn.charset)
         m = Message(to=conn.fromjid,frm = '%s%%%s@%s/%s' % (event.arguments()[0].lower(),conn.server,hostname,nick), typ='groupchat', subject = line)
         self.jabber.send(m)
         
@@ -859,12 +859,12 @@ class Transport:
         if irclib.is_channel(event.target()):
             type = 'groupchat'
             room = '%s%%%s' %(event.target().lower(),conn.server)
-            m = Message(to=conn.fromjid,body=colourparse(event.arguments()[0].lower()),typ=type,frm='%s@%s/%s' %(room, hostname,nick))
+            m = Message(to=conn.fromjid,body=colourparse(event.arguments()[0].lower(),conn.charset),typ=type,frm='%s@%s/%s' %(room, hostname,nick))
         else:
             type = 'chat'
             name = event.source()
             name = '%s%%%s' %(nick,conn.server)
-            m = Message(to=conn.fromjid,body=colourparse(event.arguments()[0].lower()),typ=type,frm='%s@%s' %(name, hostname))
+            m = Message(to=conn.fromjid,body=colourparse(event.arguments()[0].lower(),conn.charset),typ=type,frm='%s@%s' %(name, hostname))
         #print m.__str__()
         self.jabber.send(m)                     
      
@@ -875,7 +875,7 @@ class Transport:
                 type = 'groupchat'
                 room = '%s%%%s' %(event.target().lower(),conn.server)
                 
-                m = Message(to=conn.fromjid,body='/me '+colourparse(event.arguments()[1]),typ=type,frm='%s@%s/%s' %(room, hostname,nick))
+                m = Message(to=conn.fromjid,body='/me '+colourparse(event.arguments()[1],conn.charset),typ=type,frm='%s@%s/%s' %(room, hostname,nick))
             else:
                 type = 'chat'
                 name = event.source()
@@ -883,7 +883,7 @@ class Transport:
                     name = '%s%%%s' %(nick,conn.server)
                 except:
                     name = '%s%%%s' %(conn.server,conn.server)
-                m = Message(to=conn.fromjid,body='/me '+colourparse(event.arguments()[1]),typ=type,frm='%s@%s' %(name, hostname))
+                m = Message(to=conn.fromjid,body='/me '+colourparse(event.arguments()[1],conn.charset),typ=type,frm='%s@%s' %(name, hostname))
             #print m.__str__()
             self.jabber.send(m) 
         elif event.arguments()[0] == 'VERSION':
