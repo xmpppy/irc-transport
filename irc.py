@@ -31,6 +31,7 @@ charset = 'utf-8'
 #secret = 'secret'
 socketlist = {}
 
+MALFORMED_JID=ErrorNode(ERR_JID_MALFORMED,text='Invalid JID, must be in form #room%server@transport')
 
 def irc_add_conn(con):
     socketlist[con]='irc'
@@ -245,14 +246,9 @@ class Transport:
         try:
             channel, server = string.split(room,'%')
         except ValueError:
-            m = xmpp.protocol.Presence(to=event.getFrom(),frm=event.getTo(),typ='error')
-            m.setError('400','Invalid JID, must be in form #room%server@transport')
-            self.jabber.send(m)
-            return
+            channel=''
         if not irclib.is_channel(channel):
-            m = xmpp.protocol.Presence(to=event.getFrom(),frm=event.getTo(),typ='error')
-            m.setError('400','Invalid JID, must be in form #room%server@transport')
-            self.jabber.send(m)
+            self.jabber.send(Error(event,MALFORMED_JID))
             return
         if type == 'available':
             #print nick
@@ -282,9 +278,7 @@ class Transport:
                         #need to add server connection tidying
                         self.test_inuse(connection)
         else:
-            m = xmpp.protocol.Presence(to=event.getFrom(), frm=event.getTo(),typ='error')
-            m.setError('502','Not Implemented')
-            self.jabber.send(m)
+            self.jabber.send(Error(event,ERR_FEATURE_NOT_IMPLEMENTED))
             
     def test_inuse(self,connection):
         inuse = False
@@ -302,19 +296,13 @@ class Transport:
         try:
             channel, server = string.split(room,'%')
         except ValueError:
-            m = xmpp.protocol.Message(to=event.getFrom(), frm=event.getTo(), typ = 'error', body=event.getBody())
-            m.setError('500','Invalid request')
-            self.jabber.send(m)
+            self.jabber.send(Error(event,MALFORMED_JID))
             return
         if not self.users.has_key(fromjid):
-            m = xmpp.protocol.Message(to=event.getFrom(), frm=event.getTo(), typ = 'error', body=event.getBody())
-            m.setError('500','Server not connected or invalid request')
-            self.jabber.send(m)
+            self.jabber.send(Error(event,ERR_REGISTRATION_REQUIRED))         # another candidate: ERR_SUBSCRIPTION_REQUIRED
             return
         if not self.users[fromjid].has_key(server):
-            m = xmpp.protocol.Message(to=event.getFrom(), frm=event.getTo(), typ = 'error', body=event.getBody())
-            m.setError('500','Server not connected')
-            self.jabber.send(m)
+            self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))        # Another candidate: ERR_REMOTE_SERVER_NOT_FOUND (but it means that server doesn't exist at all)
             return
         #print channel, server, fromjid, self.users[fromjid][0][(channel,server)]
         if type == 'groupchat':
@@ -323,19 +311,16 @@ class Transport:
                     if (self.users[fromjid][server].chanmodes['topic']==True and self.users[fromjid][server].memberlist[self.users[fromjid][server].nickname]['role'] == 'moderator') or self.users[fromjid][server].chanmodes['topic']==False:
                         self.irc_settopic(self.users[fromjid][server],channel,event.getSubject())
                     else:
-                        m = xmpp.protocol.Message(to=event.getFrom(), frm=event.getTo(), typ='error', subject=event.getSubject())
-                        m.setError('500','Illegal request') # wrong error but hey. :)
-                        self.jabber.send(m)
+                        self.jabber.send(Error(event,ERR_FORBIDDEN))
                 elif event.getBody() != '':
                     if event.getBody()[0:3] == '/me':
                         self.irc_sendctcp('ACTION',self.users[fromjid][server],channel,event.getBody()[4:])
                     else:
                         self.irc_sendroom(self.users[fromjid][server],channel,event.getBody()) 
-                    t = xmpp.protocol.Message(to=fromjid,body=event.getBody(),typ=type,frm='%s@%s/%s' %(room, hostname,self.users[fromjid][server].nickname))
+                    t = Message(to=fromjid,body=event.getBody(),typ=type,frm='%s@%s/%s' %(room, hostname,self.users[fromjid][server].nickname))
                     self.jabber.send(t)
             else:
-                #Add error case here
-                pass
+                self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))  # or ERR_JID_MALFORMED maybe?
         elif type == 'chat' or type == None:
             if not irclib.is_channel(channel):
                 # ARGH! need to know channel to find out nick. :(
@@ -353,7 +338,7 @@ class Transport:
         fromjid = event.getFrom()
         to = event.getTo()
         id = event.getID()
-        m = xmpp.protocol.Iq(to=fromjid,frm=to, typ='result', queryNS='http://jabber.org/protocol/disco#info', payload=[Node('identity',attrs={'category':'conference','type':'irc','name':'IRC Transport'}),Node('feature',attrs={'var':'http://jabber.org/protocol/muc'})])
+        m = Iq(to=fromjid,frm=to, typ='result', queryNS='http://jabber.org/protocol/disco#info', payload=[Node('identity',attrs={'category':'conference','type':'irc','name':'IRC Transport'}),Node('feature',attrs={'var':'http://jabber.org/protocol/muc'})])
         m.setID(id)
         self.jabber.send(m)
         #raise xmpp.NodeProcessed
@@ -362,19 +347,19 @@ class Transport:
         fromjid = event.getFrom()
         to = event.getTo()
         id = event.getID()
-        m = xmpp.protocol.Iq(to=fromjid,frm=to, typ='result', queryNS='http://jabber.org/protocol/disco#items')
+        m = Iq(to=fromjid,frm=to, typ='result', queryNS='http://jabber.org/protocol/disco#items')
         m.setID(id)
         self.jabber.send(m)
         #raise xmpp.NodeProcessed
     
     def xmpp_iq_agents(self, con, event):
-        m = xmpp.protocol.Iq(to=event.getFrom(), frm=event.getTo(), typ='result', payload=[Node('agent', attrs={'jid':hostname},payload=[Node('service',payload='irc'),Node('name',payload='xmpp IRC Transport'),Node('groupchat')])])
+        m = Iq(to=event.getFrom(), frm=event.getTo(), typ='result', payload=[Node('agent', attrs={'jid':hostname},payload=[Node('service',payload='irc'),Node('name',payload='xmpp IRC Transport'),Node('groupchat')])])
         m.setID(event.getID())
         self.jabber.send(m)
         #raise xmpp.NodeProcessed
     
     def xmpp_iq_browse(self, con, event):
-        m = xmpp.protocol.Iq(to = event.getFrom(), frm = event.getTo(), typ = 'result', queryNS = 'jabber:iq:browse')
+        m = Iq(to = event.getFrom(), frm = event.getTo(), typ = 'result', queryNS = 'jabber:iq:browse')
         if event.getTo() == hostname:
             m.setTagAttr('query','catagory','conference')
             m.setTagAttr('query','name','xmpp IRC Transport')
@@ -388,7 +373,7 @@ class Transport:
         fromjid = event.getFrom()
         to = event.getTo()
         id = event.getID()
-        m = xmpp.protocol.Iq(to = fromjid, frm = to, typ = 'result', queryNS= 'jabber:iq:version',payload=[Node('name',payload='xmpp IRC Transport'), Node('version',payload='early release 12feb04'),Node('os',payload='%s %s %s' % (os.uname()[0],os.uname()[2],os.uname()[4]))])
+        m = Iq(to = fromjid, frm = to, typ = 'result', queryNS= 'jabber:iq:version',payload=[Node('name',payload='xmpp IRC Transport'), Node('version',payload='early release 12feb04'),Node('os',payload='%s %s %s' % (os.uname()[0],os.uname()[2],os.uname()[4]))])
         m.setID(id)
         self.jabber.send(m)
         #raise xmpp.NodeProcessed
@@ -411,28 +396,12 @@ class Transport:
         try:
             channel, server = string.split(room,'%')
         except ValueError:
-            m = xmpp.protocol.IQ(to=event.getFrom(), frm=event.getTo(), typ = 'error', body=event.getBody())
-            m.setID(id)
-            m.setError('500','Invalid request')
-            self.jabber.send(m)
+            self.jabber.send(Error(event,MALFORMED_JID))
             return
-        if fromjid not in self.users.keys():
-            m = xmpp.protocol.IQ(to=event.getFrom(), frm=event.getTo(), typ = 'error', body=event.getBody())
-            m.setID(id)
-            m.setError('500','Invalid request')
-            self.jabber.send(m)
-            return
-        if server not in self.users[fromjid].keys():
-            m = xmpp.protocol.IQ(to=event.getFrom(), frm=event.getTo(), typ = 'error', body=event.getBody())
-            m.setID(id)
-            m.setError('500','Invalid request')
-            self.jabber.send(m)
-            return
-        if channel not in self.users[fromjid][server].memberlist.keys():
-            m = xmpp.protocol.IQ(to=event.getFrom(), frm=event.getTo(), typ = 'error', body=event.getBody())
-            m.setID(id)
-            m.setError('500','Invalid request')
-            self.jabber.send(m)
+        if fromjid not in self.users.keys() \
+          or server not in self.users[fromjid].keys() \
+          or channel not in self.users[fromjid][server].memberlist.keys():
+            self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))
             return
         ns = event.getQueryNS()
         t = event.getQueryPayload()
@@ -444,7 +413,7 @@ class Transport:
             elif 'affiliation' in attr.keys():
                 affiliation = attr['affiliation']
                 role = None
-        m = xmpp.protocol.Iq(to= fromjid, frm=to, typ='result', queryNS=ns)
+        m = Iq(to= fromjid, frm=to, typ='result', queryNS=ns)
         payload = []
         for each in self.users[fromjid][server].memberlist[channel]:
             if role != None:
@@ -468,36 +437,17 @@ class Transport:
         try:
             channel, server = string.split(room,'%')
         except ValueError:
-            m = xmpp.protocol.IQ(to=event.getFrom(), frm=event.getTo(), typ = 'error', body=event.getBody())
-            m.setID(id)
-            m.setError('500','Invalid request')
-            self.jabber.send(m)
+            self.jabber.send(Error(event,MALFORMED_JID))
             return
-        if fromjid not in self.users.keys():
-            m = xmpp.protocol.IQ(to=event.getFrom(), frm=event.getTo(), typ = 'error', body=event.getBody())
-            m.setID(id)
-            m.setError('500','Invalid request')
-            self.jabber.send(m)
-            return
-        if server not in self.users[fromjid].keys():
-            m = xmpp.protocol.IQ(to=event.getFrom(), frm=event.getTo(), typ = 'error', body=event.getBody())
-            m.setID(id)
-            m.setError('500','Invalid request')
-            self.jabber.send(m)
-            return
-        if channel not in self.users[fromjid][server].memberlist.keys():
-            m = xmpp.protocol.IQ(to=event.getFrom(), frm=event.getTo(), typ = 'error', body=event.getBody())
-            m.setID(id)
-            m.setError('500','Invalid request')
-            self.jabber.send(m)
+        if fromjid not in self.users.keys() \
+          or server not in self.users[fromjid].keys() \
+          or channel not in self.users[fromjid][server].memberlist.keys():
+            self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))
             return
         ns = event.getQueryNS()
         t = event.getQueryPayload()
         if self.users[fromjid][server].memberlist[self.users[fromjid][server].nick]['role'] != 'moderator' or self.users[fromjid][server].memberlist[self.users[fromjid][server].nick]['affiliation'] != 'owner':
-            m = xmpp.protocol.IQ(to=event.getFrom(), frm=event.getTo(), typ = 'error', body=event.getBody())
-            m.setID(id)
-            m.setError('500','Invalid request')
-            self.jabber.send(m)
+            self.jabber.send(Error(event,ERR_FORBIDDEN))
             return
         for each in t:
             if t[0].getName() == 'item':
@@ -547,9 +497,7 @@ class Transport:
             #c.who(channel) 
             return c
         except irclib.ServerConnectionError:
-            m = xmpp.protocol.Presence(to = fromjid, typ = 'error', frm = '%s%%%s@%s/%s' % (channel,server,hostname,nick))
-            m.setError('404','Could not connect to irc server')
-            self.jabber.send(m)
+            self.jabber.send(Error(Presence(to = fromjid, frm = '%s%%%s@%s/%s' % (channel,server,hostname,nick)),ERR_SERVICE_UNAVAILABLE,reply=0))  # Other candidates: ERR_GONE, ERR_REMOTE_SERVER_NOT_FOUND, ERR_REMOTE_SERVER_TIMEOUT
             return None
             
     def irc_newroom(self,conn,channel):
@@ -569,7 +517,7 @@ class Transport:
         if conn.server in self.users[conn.fromjid].keys():
             try:
                 for each in conn.memberlist.keys():
-                    t = xmpp.protocol.Presence(to=conn.fromjid, typ = 'unavailable', frm='%s%%%s@%s' %(each,conn.server,hostname))
+                    t = Presence(to=conn.fromjid, typ = 'unavailable', frm='%s%%%s@%s' %(each,conn.server,hostname))
                     self.jabber.send(t)
                 del self.users[conn.fromjid][conn.server]
             except AttributeError:
@@ -582,7 +530,7 @@ class Transport:
             if nick in conn.memberlist[each].keys():
                 del conn.memberlist[each][nick]
                 name = '%s%%%s' % (each, conn.server)
-                m = xmpp.protocol.Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,string.split(event.source(),'!')[0]))
+                m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,string.split(event.source(),'!')[0]))
                 self.jabber.send(m)
     
     def irc_nick(self, conn, event):
@@ -590,12 +538,12 @@ class Transport:
         new = event.target()
         for each in conn.memberlist.keys():
             if old in conn.memberlist[each].keys():
-                m = xmpp.protocol.Presence(to=conn.fromjid,typ = 'unavailable',frm = '%s%%%s@%s/%s' % (each,conn.server,hostname,old))
+                m = Presence(to=conn.fromjid,typ = 'unavailable',frm = '%s%%%s@%s/%s' % (each,conn.server,hostname,old))
                 p = m.addChild(name='x', namespace='http://jabber.org/protocol/muc#user')
                 p.addChild(name='item', attrs={'nick':new})
                 p.addChild(name='status', attrs={'code':'303'})
                 self.jabber.send(m)
-                m = xmpp.protocol.Presence(to=conn.fromjid,typ = 'available', frm = '%s%%%s@%s/%s' % (each,conn.server,hostname,new))
+                m = Presence(to=conn.fromjid,typ = 'available', frm = '%s%%%s@%s/%s' % (each,conn.server,hostname,new))
                 self.jabber.send(m)
                 t=conn.memberlist[each][old]
                 del conn.memberlist[each][old]
@@ -608,19 +556,16 @@ class Transport:
     
     def irc_nicknameinuse(self,conn,event):
         if conn.joinchan:
-            m = xmpp.protocol.Presence(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' %(conn.joinchan, conn.server, hostname))
-            m.setError('409','The nickname is in use')
-            self.jabber.send(m)
+            error=ErrorNode(ERR_CONFLICT,text='Nickname is in use')
+            self.jabber.send(Error(Presence(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' %(conn.joinchan, conn.server, hostname)),error,reply=0))
             
     def irc_nosuchchannel(self,conn,event):
-        m = xmpp.protocol.Presence(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' %(event.arguments()[0], conn.server, hostname))
-        m.setError('404','The channel is not found')
-        self.jabber.send(m)
+        error=ErrorNode(ERR_ITEM_NOT_FOUND,'The channel is not found')
+        self.jabber.send(Presence(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' %(event.arguments()[0], conn.server, hostname)),error,reply=0)
 
     def irc_notregistered(self,conn,event):
-        m = xmpp.protocol.Presence(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' %(conn.joinchan, conn.server, hostname))
-        m.setError('404','Not registered and registration is not supported')
-        self.jabber.send(m)
+        error=ErrorNode(ERR_FORBIDDEN,text='Not registered and registration is not supported')
+        self.jabber.send(Presence(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' %(conn.joinchan, conn.server, hostname)),error)
     
     def irc_mode(self,conn,event):
         #modelist = irclib.parse_channel_modes(event.arguments())
@@ -631,7 +576,7 @@ class Transport:
                 if irclib.irc_lower(event.target().lower()) in conn.memberlist.keys():
                     for each in event.arguments()[1:]:
                         conn.memberlist[event.target().lower()][each]['role']='moderator'
-                        m = xmpp.protocol.Presence(to=conn.fromjid,typ='available',frm = '%s/%s' %(faddr,each))
+                        m = Presence(to=conn.fromjid,typ='available',frm = '%s/%s' %(faddr,each))
                         t = m.addChild(name='x',namespace='http://jabber.org/protocol/muc#user')
                         p = t.addChild(name='item',attrs=conn.memberlist[event.target().lower()][each])
                         self.jabber.send(m)
@@ -640,7 +585,7 @@ class Transport:
                 if irclib.irc_lower(event.target().lower()) in conn.memberlist.keys():
                     for each in event.arguments()[1:]:
                         conn.memberlist[event.target().lower()][each]['role']='visitor'
-                        m = xmpp.protocol.Presence(to=conn.fromjid,typ='available',frm = '%s/%s' %(faddr,each))
+                        m = Presence(to=conn.fromjid,typ='available',frm = '%s/%s' %(faddr,each))
                         t = m.addChild(name='x',namespace='http://jabber.org/protocol/muc#user')
                         p = t.addChild(name='item',attrs=conn.memberlist[event.target().lower()][each])
                         self.jabber.send(m)
@@ -649,7 +594,7 @@ class Transport:
                 if irclib.irc_lower(event.target().lower()) in conn.memberlist.keys():
                     for each in event.arguments()[1:]:
                         conn.memberlist[event.target().lower()][each]['role']='participant'
-                        m = xmpp.protocol.Presence(to=conn.fromjid,typ='available',frm = '%s/%s' %(faddr,each))
+                        m = Presence(to=conn.fromjid,typ='available',frm = '%s/%s' %(faddr,each))
                         t = m.addChild(name='x',namespace='http://jabber.org/protocol/muc#user')
                         p = t.addChild(name='item',attrs=conn.memberlist[event.target().lower()][each])
                         self.jabber.send(m)
@@ -700,13 +645,13 @@ class Transport:
                 del conn.memberlist[irclib.irc_lower(event.target())][string.split(event.source(),'!')[0]]
         except KeyError:
             pass
-        m = xmpp.protocol.Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,string.split(event.source(),'!')[0]))
+        m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,string.split(event.source(),'!')[0]))
         self.jabber.send(m)
     
     def irc_kick(self,conn,event):
         type = 'unavailable'
         name = '%s%%%s' % (irclib.irc_lower(event.target()), conn.server)
-        m = xmpp.protocol.Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,irclib.irc_lower(event.arguments()[0])))
+        m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,irclib.irc_lower(event.arguments()[0])))
         t=m.addChild(name='x',namespace='http://jabber.org/protocol/muc#user')
         p=t.addChild(name='item',attrs={'affiliation':'none','role':'none'})
         p.addChild(name='reason',payload=[colourparse(event.arguments()[1])])
@@ -725,7 +670,7 @@ class Transport:
             line = colourparse(event.arguments()[1])
         else:
             line = colourparse(event.arguments()[0])
-        m = xmpp.protocol.Message(to=conn.fromjid,frm = '%s%%%s@%s/%s' % (event.arguments()[0].lower(),conn.server,hostname,nick), typ='groupchat', subject = line)
+        m = Message(to=conn.fromjid,frm = '%s%%%s@%s/%s' % (event.arguments()[0].lower(),conn.server,hostname,nick), typ='groupchat', subject = line)
         self.jabber.send(m)
         
     def irc_join(self,conn,event):
@@ -734,7 +679,7 @@ class Transport:
         nick = irclib.nm_to_n(event.source())
         if nick not in conn.memberlist[irclib.irc_lower(event.target())].keys():
             conn.memberlist[irclib.irc_lower(event.target())][nick]={'affiliation':'none','role':'none'}
-        m = xmpp.protocol.Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname, nick))
+        m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname, nick))
         t=m.addChild(name='x',namespace='http://jabber.org/protocol/muc#user')
         p=t.addChild(name='item',attrs={'affiliation':'none','role':'visitor'})
         #print m.__str__()
@@ -743,7 +688,7 @@ class Transport:
     def irc_whoreply(self,conn,event):
         name = '%s%%%s' % (event.arguments()[0].lower(), conn.server)
         faddr = '%s@%s/%s' % (name, hostname, event.arguments()[4])
-        m = xmpp.protocol.Presence(to=conn.fromjid,typ='available',frm=faddr)
+        m = Presence(to=conn.fromjid,typ='available',frm=faddr)
         t = m.addChild(name='x', namespace='http://jabber.org/protocol/muc#user')
         affiliation = 'none'
         role = 'none'
@@ -776,12 +721,12 @@ class Transport:
         if irclib.is_channel(event.target()):
             type = 'groupchat'
             room = '%s%%%s' %(event.target().lower(),conn.server)
-            m = xmpp.protocol.Message(to=conn.fromjid,body=colourparse(event.arguments()[0].lower()),typ=type,frm='%s@%s/%s' %(room, hostname,nick))
+            m = Message(to=conn.fromjid,body=colourparse(event.arguments()[0].lower()),typ=type,frm='%s@%s/%s' %(room, hostname,nick))
         else:
             type = 'chat'
             name = event.source()
             name = '%s%%%s' %(nick,conn.server)
-            m = xmpp.protocol.Message(to=conn.fromjid,body=colourparse(event.arguments()[0].lower()),typ=type,frm='%s@%s' %(name, hostname))
+            m = Message(to=conn.fromjid,body=colourparse(event.arguments()[0].lower()),typ=type,frm='%s@%s' %(name, hostname))
         #print m.__str__()
         self.jabber.send(m)                     
      
@@ -792,7 +737,7 @@ class Transport:
                 type = 'groupchat'
                 room = '%s%%%s' %(event.target().lower(),conn.server)
                 
-                m = xmpp.protocol.Message(to=conn.fromjid,body='/me '+colourparse(event.arguments()[1]),typ=type,frm='%s@%s/%s' %(room, hostname,nick))
+                m = Message(to=conn.fromjid,body='/me '+colourparse(event.arguments()[1]),typ=type,frm='%s@%s/%s' %(room, hostname,nick))
             else:
                 type = 'chat'
                 name = event.source()
@@ -800,7 +745,7 @@ class Transport:
                     name = '%s%%%s' %(nick,conn.server)
                 except:
                     name = '%s%%%s' %(conn.server,conn.server)
-                m = xmpp.protocol.Message(to=conn.fromjid,body='/me '+colourparse(event.arguments()[1]),typ=type,frm='%s@%s' %(name, hostname))
+                m = Message(to=conn.fromjid,body='/me '+colourparse(event.arguments()[1]),typ=type,frm='%s@%s' %(name, hostname))
             #print m.__str__()
             self.jabber.send(m) 
         elif event.arguments()[0] == 'VERSION':
