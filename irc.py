@@ -7,7 +7,7 @@
 # This program is free software licensed with the GNU Public License Version 2.
 # For a full copy of the license please go here http://www.gnu.org/licenses/licenses.html#GPL
 
-import xmpp, urllib2, sys, string, time, irclib, re, ConfigParser, os, select
+import xmpp, urllib2, sys, time, irclib, re, ConfigParser, os, select
 from threading import *
 from xmpp.protocol import *
 
@@ -44,9 +44,8 @@ def irc_del_conn(con):
 
 #def irclib.irc_lower(nick):
 #    nick=nick.lower()
-#    nick=string.replace(nick,'[','{')
-#    nick=string.replace(nick,']','}')
-    #nick=string.replace(nick,'\\','|')
+#    nick=nick.replace'[','{').replace(']','}')
+    #nick=nick.replace('\\','|')
     #return nick
 
 def colourparse(str):
@@ -102,7 +101,7 @@ def colourparse(str):
             print 'Yellow'
         elif e == '\x0f':
             print 'White'
-        elif e == '\x10' or e == '\x11' or e == '\x12' or e == '\x13' or e == '\x14' or e == '\x15' or e == '\x16' or e == '\x17' or e == '\x18' or e == '\x19' or e == '\x1a' or e == '\x1b' or e == '\x1c' or e == '\x1d' or e == '\x1e' or e == '\x1f':
+        elif e in ['\x10', '\x11', '\x12', '\x13', '\x14', '\x15', '\x16', '\x17', '\x18', '\x19', '\x1a', '\x1b', '\x1c', '\x1d', '\x1e', '\x1f']:
             print 'Other Escape'
         elif ctrseq == True:
             if e.isdigit():
@@ -244,7 +243,7 @@ class Transport:
         room = to.getNode().lower()
         nick = to.getResource()
         try:
-            channel, server = string.split(room,'%')
+            channel, server = room.split('%')
         except ValueError:
             channel=''
         if not irclib.is_channel(channel):
@@ -294,7 +293,7 @@ class Transport:
         to = event.getTo()
         room = to.getNode().lower()
         try:
-            channel, server = string.split(room,'%')
+            channel, server = room.split('%')
         except ValueError:
             self.jabber.send(Error(event,MALFORMED_JID))
             return
@@ -307,7 +306,7 @@ class Transport:
         #print channel, server, fromjid, self.users[fromjid][0][(channel,server)]
         if type == 'groupchat':
             if irclib.is_channel(channel):
-                if (event.getSubject() != '') and (event.getSubject() != None):
+                if event.getSubject():
                     if (self.users[fromjid][server].chanmodes['topic']==True and self.users[fromjid][server].memberlist[self.users[fromjid][server].nickname]['role'] == 'moderator') or self.users[fromjid][server].chanmodes['topic']==False:
                         self.irc_settopic(self.users[fromjid][server],channel,event.getSubject())
                     else:
@@ -321,7 +320,7 @@ class Transport:
                     self.jabber.send(t)
             else:
                 self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))  # or ERR_JID_MALFORMED maybe?
-        elif type == 'chat' or type == None:
+        elif type in ['chat', None]:
             if not irclib.is_channel(channel):
                 # ARGH! need to know channel to find out nick. :(
                 if event.getBody()[0:3] == '/me':
@@ -394,7 +393,7 @@ class Transport:
         room = to.getNode().lower()
         id = event.getID()
         try:
-            channel, server = string.split(room,'%')
+            channel, server = room.split('%')
         except ValueError:
             self.jabber.send(Error(event,MALFORMED_JID))
             return
@@ -435,7 +434,7 @@ class Transport:
         room = to.getNode().lower()
         id = event.getID()
         try:
-            channel, server = string.split(room,'%')
+            channel, server = room.split('%')
         except ValueError:
             self.jabber.send(Error(event,MALFORMED_JID))
             return
@@ -475,13 +474,13 @@ class Transport:
         connection.topic(channel.encode(charset),line.encode(charset))
     
     def irc_sendroom(self,connection,channel,line):
-        lines = string.split(line, '/n')
+        lines = line.split('/n')
         for each in lines:
             #print channel, each
             connection.privmsg(channel.encode(charset),each.encode(charset))
 
     def irc_sendctcp(self,type,connection,channel,line):
-        lines = string.split(line, '/n')
+        lines = line.split('/n')
         for each in lines:
             #print channel, each
             connection.ctcp(type,channel.encode(charset),each.encode(charset))
@@ -530,7 +529,7 @@ class Transport:
             if nick in conn.memberlist[each].keys():
                 del conn.memberlist[each][nick]
                 name = '%s%%%s' % (each, conn.server)
-                m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,string.split(event.source(),'!')[0]))
+                m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,event.source().split('!')[0]))
                 self.jabber.send(m)
     
     def irc_nick(self, conn, event):
@@ -580,7 +579,7 @@ class Transport:
                         t = m.addChild(name='x',namespace='http://jabber.org/protocol/muc#user')
                         p = t.addChild(name='item',attrs=conn.memberlist[event.target().lower()][each])
                         self.jabber.send(m)
-            elif event.arguments()[0] == '-o' or event.arguments()[0] == '-v':
+            elif event.arguments()[0] in ['-o', '-v']:
                 # Take Chanop or Voice
                 if irclib.irc_lower(event.target().lower()) in conn.memberlist.keys():
                     for each in event.arguments()[1:]:
@@ -642,10 +641,10 @@ class Transport:
         nick = irclib.nm_to_n(event.source())
         try:
             if nick in conn.memberlist[irclib.irc_lower(event.target())].keys():
-                del conn.memberlist[irclib.irc_lower(event.target())][string.split(event.source(),'!')[0]]
+                del conn.memberlist[irclib.irc_lower(event.target())][event.source().split('!')[0]]
         except KeyError:
             pass
-        m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,string.split(event.source(),'!')[0]))
+        m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,event.source().split('!')[0]))
         self.jabber.send(m)
     
     def irc_kick(self,conn,event):
@@ -664,7 +663,7 @@ class Transport:
         self.test_inuse(conn)
         
     def irc_topic(self,conn,event):
-        nick = string.split(event.source(),'!')[0]
+        nick = event.source().split('!')[0]
         channel = event.target().lower()
         if len(event.arguments())==2:
             line = colourparse(event.arguments()[1])
