@@ -204,6 +204,8 @@ class Transport:
         self.irc.add_global_handler('nosuchchannel',self.irc_nosuchchannel)
         self.irc.add_global_handler('nosuchnick',self.irc_nosuchnick)
         self.irc.add_global_handler('notregistered',self.irc_notregistered)
+        self.irc.add_global_handler('cannotsendtochan',self.irc_cannotsend)
+        self.irc.add_global_handler('379',self.irc_redirect)
         self.irc.add_global_handler('welcome',self.irc_welcome)
         self.jabber.RegisterHandler('message',self.xmpp_message)
         self.jabber.RegisterHandler('presence',self.xmpp_presence)
@@ -709,6 +711,19 @@ class Transport:
     def irc_nosuchnick(self, conn, event):
         error=ErrorNode(ERR_ITEM_NOT_FOUND,text='Nickname not found')
         self.jabber.send(Message(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' % (event.source(), conn.server, hostname)),payload=error)
+    
+    def irc_cannotsend(self,conn,event):
+        error=ErrorNode(ERR_FORBIDDEN)
+        self.jabber.send(Message(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' % (event.source(), conn.server, hostname)),payload=error)
+    
+    def irc_redirect(self,conn,event):
+        new = '%s%%%s@%s'% (event.arguments[1],conn.server, hostname)
+        old = '%s%%%s@%s'% (event.arguments[0],conn.server, hostname)
+        error=ErrorNode(ERR_REDIRECT,new)
+        self.jabber.send(Presence(to=conn.fromjid, typ='error', frm = old, payload=error))
+        conn.memberlist[event.arguments[1]]={}
+        conn.part(event.arguments[1])
+        
     
     def irc_mode(self,conn,event):
         #modelist = irclib.parse_channel_modes(event.arguments())
