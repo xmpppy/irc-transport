@@ -268,7 +268,7 @@ class Transport:
                 self.jabber.send(Error(event,ERR_FEATURE_NOT_IMPLEMENTED))
         elif to == hostname:
             if type == 'subscribe':
-                self.jabber.send(Presence(to=fromjid, frm = to, type = 'subscribed'))
+                self.jabber.send(Presence(to=fromjid, frm = to, typ = 'subscribed'))
                 conf = userfile[fromstripped]
                 conf['usubscribed']=True
                 userfile[fromstripped]=conf
@@ -356,6 +356,7 @@ class Transport:
         m.setID(id)
         self.jabber.send(m)
         #raise xmpp.NodeProcessed
+        
     
     def xmpp_iq_agents(self, con, event):
         m = Iq(to=event.getFrom(), frm=event.getTo(), typ='result', payload=[Node('agent', attrs={'jid':hostname},payload=[Node('service',payload='irc'),Node('name',payload='xmpp IRC Transport'),Node('groupchat')])])
@@ -557,19 +558,22 @@ class Transport:
                         
     def xmpp_iq_register_set(self, con, event):
         remove = False
+        charset= self.charset
         fromjid = event.getFrom().getStripped().encode('utf8')
         for each in event.getQueryPayload():
             if each.getName() == 'charset':
                 charset = each.getData()
             elif each.getName() == 'remove':
                 remove = True
+            else:
+                self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
         if not remove:
             if userfile.has_key(fromjid):
                 conf = userfile[fromjid]
             else:
                 conf = {}
             try:
-                codecs.getdecoder(charset)
+                codecs.lookup(charset)
             except LookupError:
                 self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
                 return
@@ -579,7 +583,8 @@ class Transport:
             if not conf.has_key('subscribed'):
                 self.jabber.send(Presence(typ='subscribe',to=fromjid, frm=hostname))
         else:
-            del userfile[fromjid]
+            if userfile.has_key(fromjid):
+                del userfile[fromjid]
             m = event.buildReply('result')
             self.jabber.send(m)
             m = Presence(to = event.getFrom(), frm = hostname, typ = 'unsubscribe')
@@ -699,11 +704,11 @@ class Transport:
 
     def irc_notregistered(self,conn,event):
         error=ErrorNode(ERR_FORBIDDEN,text='Not registered and registration is not supported')
-        self.jabber.send(Presence(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' %(conn.joinchan, conn.server, hostname)),error)
+        self.jabber.send(Presence(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' %(conn.joinchan, conn.server, hostname)),payload=error)
     
     def irc_nosuchnick(self, conn, event):
         error=ErrorNode(ERR_ITEM_NOT_FOUND,text='Nickname not found')
-        self.jabber.send(Message(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' % (event.source(), conn.server, hostname)),error)
+        self.jabber.send(Message(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' % (event.source(), conn.server, hostname)),payload=error)
     
     def irc_mode(self,conn,event):
         #modelist = irclib.parse_channel_modes(event.arguments())
