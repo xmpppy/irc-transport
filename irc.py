@@ -216,7 +216,7 @@ class Transport:
         self.irc.add_global_handler('part',self.irc_part)
         self.irc.add_global_handler('quit',self.irc_quit)
         self.irc.add_global_handler('kick',self.irc_kick)
-        self.irc.add_global_handler('mode',self.irc_mode)
+        self.irc.add_global_handler('mode',self.irc_chanmode)
         self.irc.add_global_handler('error',self.irc_error)
         self.irc.add_global_handler('topic',self.irc_topic)
         self.irc.add_global_handler('nicknameinuse',self.irc_nicknameinuse)
@@ -537,6 +537,7 @@ class Transport:
             c.fromjid = fromjid
             c.joinchan = channel
             c.memberlist = {}
+            c.chanmode = {}
             #c.join(channel)
             #c.who(channel) 
             return c
@@ -551,6 +552,7 @@ class Transport:
         conn.who(channel)
         #conn.topic(channel)
         conn.memberlist[channel] = {}
+        conn.chanmode[channel] = {'private':False, 'secret':False, 'invite':False, 'topic':False, 'notmember':False, 'moderated':False, 'banlist':[], 'limit':False, 'key':''}
 
     def irc_leaveroom(self,conn,channel):
         conn.part([channel])
@@ -647,7 +649,42 @@ class Transport:
                         p = t.addChild(name='item',attrs=conn.memberlist[event.target().lower()][each])
                         self.jabber.send(m)
                     
-                    
+    def irc_chanmode(self,conn,event):
+        faddr = '%s%%%s@%s' %(event.target().lower(),conn.server,hostname)
+        channel = event.target().lower()
+        plus = None
+        for each in event.arguments()[0]:
+            if each == '+':
+                plus = True
+            elif each == '-':
+                plus = False
+            elif each == 'o': #Chanop status
+                for each in event.arguments()[1:]:
+                    conn.who(channel,each)
+            elif each == 'v': #Voice status
+                for each in event.arguments()[1:]:
+                    conn.who(channel,each)
+            elif each == 'p': #Private Room
+                conn.chanmode[event.target()]['private'] = plus
+            elif each == 's': #Secret
+                conn.chanmode[event.target()]['secret'] = plus
+            elif each == 'i': #invite only
+                conn.chanmode[event.target()]['invite'] = plus
+            elif each == 't': #only chanop can set topic
+                conn.chanmode[event.target()]['topic'] = plus
+            elif each == 'n': #no not in channel messages
+                conn.chanmode[event.target()]['notmember'] = plus
+            elif each == 'm': #moderated chanel
+                conn.chanmode[event.target()]['moderated'] = plus
+            elif each == 'l': #set channel limit
+                conn.chanmode[event.target()]['private'] = event.arguments()[1]
+            elif each == 'b': #ban users
+                if plus:
+                    conn.chanmode[event.target()]['banlist'].append(event.arguments()[1])
+                else:
+                    conn.chanmode[event.target()]['banlist'].remove(event.arguments()[1])
+            elif each == 'k': #set channel key
+                pass
     
     def irc_part(self,conn,event):
         type = 'unavailable'
