@@ -671,8 +671,9 @@ class Transport:
     def irc_sendroom(self,connection,channel,line):
         lines = line.split('/n')
         for each in lines:
-            #print channel, each
-            connection.privmsg(channel.encode(connection.charset),each.encode(connection.charset))
+            print channel, each
+            if each != '' or each == None:
+                connection.privmsg(channel.encode(connection.charset),each.encode(connection.charset))
 
     def irc_sendctcp(self,type,connection,channel,line):
         lines = line.split('/n')
@@ -891,12 +892,12 @@ class Transport:
             line,xhtml = colourparse(event.arguments()[1],conn.charset)
         else:
             line,xhtml = colourparse(event.arguments()[0],conn.charset)
-        m = Message(to=conn.fromjid,frm = '%s%%%s@%s/%s' % (event.arguments()[0].lower(),conn.server,hostname,nick), typ='groupchat', subject = line)
+        m = Message(to=conn.fromjid,frm = '%s%%%s@%s/%s' % (unicode(channel,conn.charset,'replace'),conn.server,hostname,nick), typ='groupchat', subject = line)
         self.jabber.send(m)
         
     def irc_join(self,conn,event):
         type = 'available'
-        name = '%s%%%s' % (irclib.irc_lower(event.target()), conn.server)
+        name = '%s%%%s' % (unicode(irclib.irc_lower(event.target()),conn.charset,'replace'), conn.server)
         nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
         if nick not in conn.memberlist[irclib.irc_lower(unicode(event.target(),'utf-8','replace').encode('utf-8'))].keys():
             conn.memberlist[irclib.irc_lower(event.target())][nick]={'affiliation':'none','role':'none'}
