@@ -272,6 +272,11 @@ class Transport:
         to = event.getTo()
         room = to.getNode().lower()
         try:
+            if event.getSubject.strip() == '':
+                event.setSubject(None)
+        except AttributeError:
+            pass
+        try:
             channel, server = room.split('%')
         except ValueError:
             self.jabber.send(Error(event,MALFORMED_JID))
@@ -286,7 +291,7 @@ class Transport:
         if type == 'groupchat':
             if irclib.is_channel(channel):
                 if event.getSubject():
-                    if (self.users[fromjid][server].chanmodes['topic']==True and self.users[fromjid][server].memberlist[self.users[fromjid][server].nickname]['role'] == 'moderator') or self.users[fromjid][server].chanmodes['topic']==False:
+                    if (self.users[fromjid][server].chanmode['topic']==True and self.users[fromjid][server].memberlist[self.users[fromjid][server].nickname]['role'] == 'moderator') or self.users[fromjid][server].chanmode['topic']==False:
                         self.irc_settopic(self.users[fromjid][server],channel,event.getSubject())
                     else:
                         self.jabber.send(Error(event,ERR_FORBIDDEN))
