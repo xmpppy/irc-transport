@@ -303,7 +303,7 @@ class Transport:
             elif type == 'unavailable':
                 if self.users.has_key(fromjid):
                     if self.users[fromjid].has_key(server):
-                        if event.getTo().getResource() == self.users[fromjid][server].nickname:
+                        if event.getTo().getResource() == self.users[fromjid][server].nickname or event.getTo().getResource() == '':
                             if self.users[fromjid][server].memberlist.has_key(channel):
                                 connection = self.users[fromjid][server]
                                 self.irc_leaveroom(connection,channel)
@@ -331,6 +331,13 @@ class Transport:
                     userfile[fromstripped]=conf
                 else:
                     self.jabber.send(Error(event,ERR_BAD_REQUEST))
+            #
+            #Add code so people can see transport presence here
+            #
+            elif type == 'probe':
+                if not userfile.has_key(fromstripped):
+                    self.jabber.send(Presence(to=fromjid, frm=to, typ = 'unsubscribe'))
+                    self.jabber.send(Presence(to=fromjid, frm=to, typ = 'unsubscribed'))
         else:
             self.jabber.send(Error(event,MALFORMED_JID))
             return
@@ -363,6 +370,8 @@ class Transport:
             return
         if not self.users[fromjid].has_key(server):
             self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))        # Another candidate: ERR_REMOTE_SERVER_NOT_FOUND (but it means that server doesn't exist at all)
+            return
+        if event.getBody() == None:
             return
         #print channel, server, fromjid, self.users[fromjid][0][(channel,server)]
         if type == 'groupchat':
