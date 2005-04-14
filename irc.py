@@ -44,6 +44,7 @@ def irc_del_conn(con):
 
 def colourparse(str,charset):
     # Each tuple consists of String, foreground, background, bold.
+    #str = str.replace('/','//')
     foreground=None
     background=None
     bold=None
@@ -640,10 +641,11 @@ class Transport:
         #        remove = True
         #    else:
         #        self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
-        if event.getQueryPayload().getTag('remove'):
+        query = event.getTag('query')
+        if query.getTag('remove'):
         	remove = True
-        elif event.getQueryPayload().getTag('charset'):
-        	ucharset = event.getQueryPayload().getTagData('charset')
+        elif query.getTag('charset'):
+        	ucharset = query.getTagData('charset')
         else:
         	self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
         if not remove:
@@ -683,22 +685,34 @@ class Transport:
             con.close()
 
     def irc_settopic(self,connection,channel,line):
-        connection.topic(channel.encode(connection.charset),line.encode(connection.charset))
-
+    	try:
+        	connection.topic(channel.encode(connection.charset),line.encode(connection.charset))
+	except:
+		self.irc_doquit(connection)
+		
     def irc_sendnick(self,connection,nick):
-        connection.nick(nick)
-
+        try:
+        	connection.nick(nick)
+	except:
+		self.irc_doquit(connection)
+		
     def irc_sendroom(self,connection,channel,line):
-        lines = line.split('/n')
+        lines = line.split('\x0a')
         for each in lines:
             #print channel, each
             if each != '' or each == None:
-                connection.privmsg(channel.encode(connection.charset),each.encode(connection.charset))
+               try:
+                	connection.privmsg(channel.encode(connection.charset),each.encode(connection.charset))
+               except:
+                	self.irc_doquit(connection)
 
     def irc_sendctcp(self,type,connection,channel,line):
-        lines = line.split('/n')
+        lines = line.split('\x0a')
         for each in lines:
-            connection.ctcp(type,channel.encode(connection.charset),each.encode(connection.charset))
+            try:
+            	connection.ctcp(type,channel.encode(connection.charset),each.encode(connection.charset))
+            except:
+                self.irc_doquit(connection)
 
     def irc_newconn(self,channel,server,nick,fromjid):
         try:
@@ -718,14 +732,20 @@ class Transport:
             return None
 
     def irc_newroom(self,conn,channel):
-        conn.join(channel)
-        conn.who(channel)
+        try:
+           conn.join(channel)
+           conn.who(channel)
+        except:
+           self.irc_doquit(connection)
         conn.memberlist[channel] = {}
         conn.chanmode[channel] = {'private':False, 'secret':False, 'invite':False, 'topic':False, 'notmember':False, 'moderated':False, 'banlist':[], 'limit':False, 'key':''}
 
     def irc_leaveroom(self,conn,channel):
-        conn.part([channel])
-
+        try:
+           conn.part([channel])
+	except:
+           self.irc_doquit(connection)
+    
     # IRC message handlers
     def irc_error(self,conn,event):
         if conn.server in self.users[conn.fromjid].keys():
@@ -803,8 +823,10 @@ class Transport:
         error=ErrorNode(ERR_REDIRECT,new)
         self.jabber.send(Presence(to=conn.fromjid, typ='error', frm = old, payload=[error]))
         conn.memberlist[event.arguments()[1]]={}
-        conn.part(event.arguments()[1])
-
+        try:
+           conn.part(event.arguments()[1])
+	except:
+           self.irc_doquit(connection)
 
     def irc_mode(self,conn,event):
     # Mode handling currently is very poor.
