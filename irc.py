@@ -784,6 +784,8 @@ class Transport:
                 p.addChild(name='status', attrs={'code':'303'})
                 self.jabber.send(m)
                 m = Presence(to=conn.fromjid,typ = 'available', frm = '%s%%%s@%s/%s' % (each,conn.server,hostname,new))
+                t = m.addChild(name='x',namespace=NS_MUC_USER)
+                p = t.addChild(name='item',attrs=conn.memberlist[each][old])
                 self.jabber.send(m)
                 t=conn.memberlist[each][old]
                 del conn.memberlist[each][old]
