@@ -379,19 +379,29 @@ class Transport:
         if event.getBody() == None:
             return
         if type == 'groupchat':
+            print "Groupchat"
             if irclib.is_channel(channel):
+                print "channel:", event.getBody()
                 if event.getSubject():
+                    print "subject"
                     if self.users[fromjid][server].chanmode.has_key('topic'):
+                        print "topic"
                         if (self.users[fromjid][server].chanmode['topic']==True and self.users[fromjid][server].memberlist[self.users[fromjid][server].nickname]['role'] == 'moderator') or self.users[fromjid][server].chanmode['topic']==False:
+                            print "set topic ok"
                             self.irc_settopic(self.users[fromjid][server],channel,event.getSubject())
                         else:
+                            print "set topic forbidden"
                             self.jabber.send(Error(event,ERR_FORBIDDEN))
                     else:
+                        print "anyone can set topic"
                         self.irc_settopic(self.users[fromjid][server],channel,event.getSubject())
                 elif event.getBody() != '':
+                    print "body isn't empty:" , event.getBody()
                     if event.getBody()[0:3] == '/me':
+                        print "action"
                         self.irc_sendctcp('ACTION',self.users[fromjid][server],channel,event.getBody()[4:])
                     else:
+                        print "room message"
                         self.irc_sendroom(self.users[fromjid][server],channel,event.getBody())
                     t = Message(to=fromjid,body=event.getBody(),typ=type,frm='%s@%s/%s' %(room, hostname,self.users[fromjid][server].nickname))
                     self.jabber.send(t)
@@ -626,6 +636,7 @@ class Transport:
         m.setQueryNS(NS_REGISTER)
         m.setQueryPayload([Node('instructions', payload = 'Please provide your legacy Character set or codepage. (eg cp437, cp1250, iso-8859-1, koi8-r)'),Node('charset',payload=charset)])
         self.jabber.send(m)
+        raise xmpp.NodeProcessed
 
     def xmpp_iq_register_set(self, con, event):
         remove = False
@@ -643,11 +654,11 @@ class Transport:
         #        self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
         query = event.getTag('query')
         if query.getTag('remove'):
-        	remove = True
+            remove = True
         elif query.getTag('charset'):
-        	ucharset = query.getTagData('charset')
+            ucharset = query.getTagData('charset')
         else:
-        	self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
+            self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
         if not remove:
             if userfile.has_key(fromjid):
                 conf = userfile[fromjid]
@@ -675,6 +686,7 @@ class Transport:
             self.jabber.send(m)
             m = Presence(to = event.getFrom(), frm = hostname, typ = 'unsubscribed')
             self.jabber.send(m)
+       	raise xmpp.NodeProcessed
 
     #IRC methods
     def irc_doquit(self,con):
@@ -685,32 +697,33 @@ class Transport:
             con.close()
 
     def irc_settopic(self,connection,channel,line):
-    	try:
-        	connection.topic(channel.encode(connection.charset),line.encode(connection.charset))
-	except:
-		self.irc_doquit(connection)
-		
+        try:
+            connection.topic(channel.encode(connection.charset),line.encode(connection.charset))
+        except:
+            self.irc_doquit(connection)
+
     def irc_sendnick(self,connection,nick):
         try:
-        	connection.nick(nick)
-	except:
-		self.irc_doquit(connection)
-		
+            connection.nick(nick)
+        except:
+            self.irc_doquit(connection)
+
     def irc_sendroom(self,connection,channel,line):
         lines = line.split('\x0a')
         for each in lines:
             #print channel, each
             if each != '' or each == None:
                try:
-                	connection.privmsg(channel.encode(connection.charset),each.encode(connection.charset))
+                    connection.privmsg(channel.encode(connection.charset),each.encode(connection.charset))
                except:
-                	self.irc_doquit(connection)
+                    self.irc_doquit(connection)
 
     def irc_sendctcp(self,type,connection,channel,line):
         lines = line.split('\x0a')
         for each in lines:
+            #print channel, each
             try:
-            	connection.ctcp(type,channel.encode(connection.charset),each.encode(connection.charset))
+                connection.ctcp(type,channel.encode(connection.charset),each.encode(connection.charset))
             except:
                 self.irc_doquit(connection)
 
@@ -743,9 +756,9 @@ class Transport:
     def irc_leaveroom(self,conn,channel):
         try:
            conn.part([channel])
-	except:
-           self.irc_doquit(connection)
-    
+        except:
+            self.irc_doquit(connection)
+
     # IRC message handlers
     def irc_error(self,conn,event):
         if conn.server in self.users[conn.fromjid].keys():
@@ -827,7 +840,7 @@ class Transport:
         conn.memberlist[event.arguments()[1]]={}
         try:
            conn.part(event.arguments()[1])
-	except:
+        except:
            self.irc_doquit(connection)
 
     def irc_mode(self,conn,event):
@@ -954,10 +967,10 @@ class Transport:
         name = '%s%%%s' % (unicode(irclib.irc_lower(event.target()),conn.charset,'replace'), conn.server)
         nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
         if nick not in conn.memberlist[irclib.irc_lower(unicode(event.target(),'utf-8','replace').encode('utf-8'))].keys():
-            conn.memberlist[irclib.irc_lower(event.target())][nick]={'affiliation':'none','role':'none'}
+            conn.memberlist[irclib.irc_lower(event.target())][nick]={'affiliation':'none','role':'visitor'}
         m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname, nick))
         t=m.addChild(name='x',namespace=NS_MUC_USER)
-        p=t.addChild(name='item',attrs={'affiliation':'none','role':'visitor'})
+        p=t.addChild(name='item',attrs=conn.memberlist[irclib.irc_lower(event.target())][nick])
         #print m.__str__()
         self.jabber.send(m)
         if activitymessages == True:
