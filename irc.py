@@ -7,7 +7,7 @@
 # This program is free software licensed with the GNU Public License Version 2.
 # For a full copy of the license please go here http://www.gnu.org/licenses/licenses.html#GPL
 
-import xmpp, urllib2, sys, time, irclib, re, ConfigParser, os, select, codecs, shelve
+import xmpp, urllib2, sys, time, irclib, re, ConfigParser, os, select, codecs, shelve, socket
 from xmpp.protocol import *
 from xmpp.features import *
 from xmpp.browser import *
