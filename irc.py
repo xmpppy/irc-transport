@@ -14,6 +14,7 @@ from xmpp.browser import *
 from xmpp.commands import *
 from jep0133 import *
 import xmpp.commands
+import jep0133
 
 #Global definitions
 True = 1
@@ -265,6 +266,8 @@ class Transport:
         self.cmdactiveusers.plugin(self.command)
         self.cmdregisteredusers = Registered_Users_Command(self, self.jabber)
         self.cmdregisteredusers.plugin(self.command)
+        self.cmdeditadminusers = Edit_Admin_List_Command(self, self.jabber, configfile, configfilename, administrators)
+        self.cmdeditadminusers.plugin(self.command)
         self.disco.setDiscoHandler(self.xmpp_base_disco,node='',jid='')
 
     # New Disco Handlers
@@ -386,7 +389,7 @@ class Transport:
                     print "subject"
                     if self.users[fromjid][server].chanmode.has_key('topic'):
                         print "topic"
-                        if (self.users[fromjid][server].chanmode['topic']==True and self.users[fromjid][server].memberlist[self.users[fromjid][server].nickname]['role'] == 'moderator') or self.users[fromjid][server].chanmode['topic']==False:
+                        if (self.users[fromjid][server].chanmode['topic']==True and self.users[fromjid][server].memberlist[channel][self.users[fromjid][server].nickname]['role'] == 'moderator') or self.users[fromjid][server].chanmode['topic']==False:
                             print "set topic ok"
                             self.irc_settopic(self.users[fromjid][server],channel,event.getSubject())
                         else:
@@ -491,6 +494,7 @@ class Transport:
                 affiliation = attr['affiliation']
                 role = None
         m = Iq(to= fromjid, frm=to, typ='result', queryNS=ns)
+        m.setID(id)
         payload = []
         for each in self.users[fromjid][server].memberlist[channel]:
             if role != None:
@@ -505,6 +509,7 @@ class Transport:
                     payload.append(Node('item',attrs = zattr))
         m.setQueryPayload(payload)
         self.jabber.send(m)
+        raise xmpp.NodeProcessed
 
     def xmpp_iq_mucadmin_set(self, con, event):
         fromjid = event.getFrom()
@@ -523,7 +528,7 @@ class Transport:
             return
         ns = event.getQueryNS()
         t = event.getQueryPayload()
-        if self.users[fromjid][server].memberlist[self.users[fromjid][server].nick]['role'] != 'moderator' or self.users[fromjid][server].memberlist[self.users[fromjid][server].nick]['affiliation'] != 'owner':
+        if self.users[fromjid][server].memberlist[channel][self.users[fromjid][server].nickname]['role'] != 'moderator' or self.users[fromjid][server].memberlist[channel][self.users[fromjid][server].nickname]['affiliation'] != 'owner':
             self.jabber.send(Error(event,ERR_FORBIDDEN))
             return
         for each in t:
@@ -532,13 +537,26 @@ class Transport:
                 if attr.has_key('role'):
                     if attr['role'] == 'moderator':
                         self.users[fromjid][server].mode(channel,'%s %s'%('+o',attr['nick']))
+                        raise xmpp.NodeProcessed
                     elif attr['role'] == 'participant':
                         self.users[fromjid][server].mode(channel,'%s %s'%('+v',attr['nick']))
+                        raise xmpp.NodeProcessed
                     elif attr['role'] == 'visitor':
                         self.users[fromjid][server].mode(channel,'%s %s'%('-v',attr['nick']))
                         self.users[fromjid][server].mode(channel,'%s %s'%('-o',attr['nick']))
+                        raise xmpp.NodeProcessed
                     elif attr['role'] == 'none':
                         self.users[fromjid][server].kick(channel,attr['nick'],'Kicked')#Need to add reason gathering
+                        raise xmpp.NodeProcessed
+                if attr.has_key('affiliation'):
+                    nick, room = attr['jid'].split('%')
+                    if attr['affiliation'] == 'member':
+                        self.users[fromjid][server].mode(channel,'%s %s'%('+v',nick))
+                        raise xmpp.NodeProcessed
+                    elif attr['affiliation'] == 'none':
+                        self.users[fromjid][server].mode(channel,'%s %s'%('-v',nick))
+                        self.users[fromjid][server].mode(channel,'%s %s'%('-o',nick))
+                        raise xmpp.NodeProcessed
 
     def xmpp_iq_mucowner_get(self, con, event):
         fromjid = event.getFrom()
@@ -557,11 +575,14 @@ class Transport:
             return
         ns = event.getQueryNS()
         t = event.getQueryPayload()
-        if self.users[fromjid][server].memberlist[self.users[fromjid][server].nick]['role'] != 'moderator' or self.users[fromjid][server].memberlist[self.users[fromjid][server].nick]['affiliation'] != 'owner':
+        if self.users[fromjid][server].memberlist[channel][self.users[fromjid][server].nickname]['role'] != 'moderator' or self.users[fromjid][server].memberlist[channel][self.users[fromjid][server].nickname]['affiliation'] != 'owner':
             self.jabber.send(Error(event,ERR_FORBIDDEN))
             return
         datafrm = DataForm(data=self.users[fromjid][server].chanlist[channel])
-        self.jabber.send(Iq(frm = to, to = fromjid, id = id, type='result', queryNS= ns, queryPayload = datafrm))
+        m = Iq(frm = to, to = fromjid, id = id, type='result', queryNS= ns, queryPayload = datafrm)
+        m.setID(id)
+        self.jabber.send(m)
+        raise xmpp.NodeProcessed
 
     def xmpp_iq_mucowner_set(self, con, event):
         fromjid = event.getFrom()
@@ -580,7 +601,7 @@ class Transport:
             return
         ns = event.getQueryNS()
         t = event.getQueryPayload()
-        if self.users[fromjid][server].memberlist[self.users[fromjid][server].nick]['role'] != 'moderator' or self.users[fromjid][server].memberlist[self.users[fromjid][server].nick]['affiliation'] != 'owner':
+        if self.users[fromjid][server].memberlist[channel][self.users[fromjid][server].nickname]['role'] != 'moderator' or self.users[fromjid][server].memberlist[channel][self.users[fromjid][server].nickname]['affiliation'] != 'owner':
             self.jabber.send(Error(event,ERR_FORBIDDEN))
             return
         datadrm = event.getQueryPayload()[0].asDict()
@@ -610,21 +631,26 @@ class Transport:
                     for item in datafrm[each]:
                         if item not in self.users[fromjid][server].chanmode[each]:
                             self.users[fromjid][server].mode(channel,'+b %s' % item)
+                            raise xmpp.NodeProcessed
                     for item in self.users[fromjid][server].chanmode[each]:
                         if item not in datafrm[each]:
                             self.users[fromjid][server].mode(channel,'-b %s' % item)
+                            raise xmpp.NodeProcessed
                 elif each == 'limit':
                     cmd = 'l'
                     typ = '+'
                     val = True
                     self.users[fromjid][server].mode(channel,'+l %s' % each)
+                    raise xmpp.NodeProcessed
                 elif each == 'key':
                     cmd = 'k'
                     typ = '+'
                     val = True
                     self.users[fromjid][server].mode(channel, '+k %s' % each)
+                    raise xmpp.NodeProcessed
                 if not val:
                     self.users[fromjid][server].mode(channel,'%s%s' % (typ,cmd))
+                    raise xmpp.NodeProcessed
 
     # Registration code
     def xmpp_iq_register_get(self, con, event):
@@ -849,7 +875,6 @@ class Transport:
     # Issues:
     # Multiple +b's currently not handled
     # +l or -l with no parameter not handled
-
         faddr = '%s%%%s@%s' %(event.target().lower(),conn.server,hostname)
         if irclib.is_channel(event.target()):
             if event.arguments()[0] == '+o':
@@ -857,6 +882,8 @@ class Transport:
                 if irclib.irc_lower(event.target().lower()) in conn.memberlist.keys():
                     for each in event.arguments()[1:]:
                         conn.memberlist[event.target().lower()][each]['role']='moderator'
+                        if each == conn.nickname:
+                            conn.memberlist[event.target().lower()][each]['affiliation']='owner'
                         m = Presence(to=conn.fromjid,typ='available',frm = '%s/%s' %(faddr,each))
                         t = m.addChild(name='x',namespace=NS_MUC_USER)
                         p = t.addChild(name='item',attrs=conn.memberlist[event.target().lower()][each])
@@ -866,6 +893,7 @@ class Transport:
                 if irclib.irc_lower(event.target().lower()) in conn.memberlist.keys():
                     for each in event.arguments()[1:]:
                         conn.memberlist[event.target().lower()][each]['role']='visitor'
+                        conn.memberlist[event.target().lower()][each]['affiliation']='none'
                         m = Presence(to=conn.fromjid,typ='available',frm = '%s/%s' %(faddr,each))
                         t = m.addChild(name='x',namespace=NS_MUC_USER)
                         p = t.addChild(name='item',attrs=conn.memberlist[event.target().lower()][each])
@@ -875,6 +903,7 @@ class Transport:
                 if irclib.irc_lower(event.target().lower()) in conn.memberlist.keys():
                     for each in event.arguments()[1:]:
                         conn.memberlist[event.target().lower()][each]['role']='participant'
+                        conn.memberlist[event.target().lower()][each]['affiliation']='none'
                         m = Presence(to=conn.fromjid,typ='available',frm = '%s/%s' %(faddr,each))
                         t = m.addChild(name='x',namespace=NS_MUC_USER)
                         p = t.addChild(name='item',attrs=conn.memberlist[event.target().lower()][each])
@@ -891,11 +920,13 @@ class Transport:
             elif each == '-':
                 plus = False
             elif each == 'o': #Chanop status
-                for each in event.arguments()[1:]:
-                    conn.who(channel,each)
+                self.irc_mode(conn,event)
+                #for each in event.arguments()[1:]:
+                #    conn.who(channel,each)
             elif each == 'v': #Voice status
-                for each in event.arguments()[1:]:
-                    conn.who(channel,each)
+                self.irc_mode(conn,event)
+                #for each in event.arguments()[1:]:
+                #    conn.who(channel,each)
             elif each == 'p': #Private Room
                 conn.chanmode[event.target().lower()]['private'] = plus
             elif each == 's': #Secret
@@ -938,9 +969,10 @@ class Transport:
     def irc_kick(self,conn,event):
         type = 'unavailable'
         name = '%s%%%s' % (irclib.irc_lower(event.target()), conn.server)
+        jid = '%s%%%s@%s' % (irclib.irc_lower(event.arguments()[0]), conn.server, hostname)
         m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,irclib.irc_lower(event.arguments()[0])))
         t=m.addChild(name='x',namespace=NS_MUC_USER)
-        p=t.addChild(name='item',attrs={'affiliation':'none','role':'none'})
+        p=t.addChild(name='item',attrs={'affiliation':'none','role':'none','jid':jid})
         p.addChild(name='reason',payload=[colourparse(event.arguments()[1],conn.charset)][0])
         t.addChild(name='status',attrs={'code':'307'})
         self.jabber.send(m)
@@ -951,10 +983,11 @@ class Transport:
 
     def irc_topic(self,conn,event):
         nick = unicode(event.source().split('!')[0],conn.charset,'replace')
-        channel = event.target().lower()
         if len(event.arguments())==2:
+            channel = event.arguments()[0].lower()
             line,xhtml = colourparse(event.arguments()[1],conn.charset)
         else:
+            channel = event.target().lower()
             line,xhtml = colourparse(event.arguments()[0],conn.charset)
         if activitymessages == True:
             m = Message(to=conn.fromjid,frm = '%s%%%s@%s/%s' % (unicode(channel,conn.charset,'replace'),conn.server,hostname,nick),body='/me set the topic to: %s' % line, typ='groupchat', subject = line)
@@ -965,9 +998,10 @@ class Transport:
     def irc_join(self,conn,event):
         type = 'available'
         name = '%s%%%s' % (unicode(irclib.irc_lower(event.target()),conn.charset,'replace'), conn.server)
+        jid = '%s%%%s@%s' % (nick, conn.server, hostname)
         nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
         if nick not in conn.memberlist[irclib.irc_lower(unicode(event.target(),'utf-8','replace').encode('utf-8'))].keys():
-            conn.memberlist[irclib.irc_lower(event.target())][nick]={'affiliation':'none','role':'visitor'}
+            conn.memberlist[irclib.irc_lower(event.target())][nick]={'affiliation':'none','role':'visitor','jid':jid}	
         m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname, nick))
         t=m.addChild(name='x',namespace=NS_MUC_USER)
         p=t.addChild(name='item',attrs=conn.memberlist[irclib.irc_lower(event.target())][nick])
@@ -986,17 +1020,20 @@ class Transport:
         role = 'none'
         if '@' in event.arguments()[5]:
             role = 'moderator'
+            if event.arguments()[4] == conn.nickname:
+                affiliation='owner'
         elif '+' in event.arguments()[5]:
             role = 'participant'
         elif '*' in event.arguments()[5]:
             affiliation = 'admin'
         elif role == 'none':
             role = 'visitor'
-        p=t.addChild(name='item',attrs={'affiliation':affiliation,'role':role})
+        jid = '%s%%%s@%s' % (unicode(event.arguments()[4],conn.charset,'replace'), conn.server, hostname)
+        p=t.addChild(name='item',attrs={'affiliation':affiliation,'role':role,'jid':jid})
         self.jabber.send(m)
         try:
             if (event.arguments()[0] != '*') and (unicode(event.arguments()[4],conn.charset,'replace') not in conn.memberlist[event.arguments()[0].lower()].keys()):
-                conn.memberlist[event.arguments()[0].lower()][unicode(event.arguments()[4],conn.charset,'replace')]={'affiliation':affiliation,'role':role}
+                conn.memberlist[event.arguments()[0].lower()][unicode(event.arguments()[4],conn.charset,'replace')]={'affiliation':affiliation,'role':role,'jid':jid}
         except KeyError:
             pass
 
@@ -1077,9 +1114,9 @@ if __name__ == '__main__':
         charset = configfile.get('transport','Charset')
     #JEP-0133 addition for administrators, comma seperated list of jids.
     if configfile.has_option('transport','Administrators'):
-        administrators = configfile.get('transport','Administrators').split(',')
+        jep0133.administrators = configfile.get('transport','Administrators').split(',')
     else:
-        administrators = []
+        jep0133.administrators = []
     activitymessages = True # For displaying user acitivity messages
     if configfile.has_option('transport','UserFile'):
         userfilepath = configfile.get('transport','UserFile')
@@ -1091,6 +1128,7 @@ if __name__ == '__main__':
     global connection
     connection = xmpp.client.Component(hostname,port)
     transport = Transport(connection,ircobj)
+    transport.userfile = userfile
     if not connectxmpp(transport.register_handlers):
         print "Password mismatch!"
         sys.exit(1)
@@ -1113,7 +1151,10 @@ if __name__ == '__main__':
             (i , o, e) = select.select(socketlist.keys(),[],[],1)
         for each in i:
             if socketlist[each] == 'xmpp':
-                connection.Process(1)
+                try:
+                    connection.Process(1)
+                except IOError:
+                    transport.xmpp_disconnect()
                 if not connection.isConnected():  transport.xmpp_disconnect()
             else:
                 ircobj.process_data([each])
