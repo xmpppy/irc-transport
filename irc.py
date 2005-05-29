@@ -284,7 +284,7 @@ class Transport:
         fromjid = str(event.getFrom())
         fromstripped = fromjid.encode('utf-8')
         type = event.getType()
-        if type == None: type = 'available'
+        #if type == None: type = 'available'
         to = event.getTo()
         room = to.getNode().lower()
         nick = to.getResource()
@@ -293,7 +293,7 @@ class Transport:
         except ValueError:
             channel=''
         if irclib.is_channel(channel):
-            if type == 'available':
+            if type == None:
                 if nick != '':
                     if not self.users.has_key(fromjid): # if a new user session
                         c=self.irc_newconn(channel,server,nick,fromjid)
@@ -822,7 +822,7 @@ class Transport:
                 p.addChild(name='item', attrs={'nick':new})
                 p.addChild(name='status', attrs={'code':'303'})
                 self.jabber.send(m)
-                m = Presence(to=conn.fromjid,typ = 'available', frm = '%s%%%s@%s/%s' % (each,conn.server,hostname,new))
+                m = Presence(to=conn.fromjid,typ = None, frm = '%s%%%s@%s/%s' % (each,conn.server,hostname,new))
                 t = m.addChild(name='x',namespace=NS_MUC_USER)
                 p = t.addChild(name='item',attrs=conn.memberlist[each][old])
                 self.jabber.send(m)
@@ -884,7 +884,7 @@ class Transport:
                         conn.memberlist[event.target().lower()][each]['role']='moderator'
                         if each == conn.nickname:
                             conn.memberlist[event.target().lower()][each]['affiliation']='owner'
-                        m = Presence(to=conn.fromjid,typ='available',frm = '%s/%s' %(faddr,each))
+                        m = Presence(to=conn.fromjid,typ=None,frm = '%s/%s' %(faddr,each))
                         t = m.addChild(name='x',namespace=NS_MUC_USER)
                         p = t.addChild(name='item',attrs=conn.memberlist[event.target().lower()][each])
                         self.jabber.send(m)
@@ -894,7 +894,7 @@ class Transport:
                     for each in event.arguments()[1:]:
                         conn.memberlist[event.target().lower()][each]['role']='visitor'
                         conn.memberlist[event.target().lower()][each]['affiliation']='none'
-                        m = Presence(to=conn.fromjid,typ='available',frm = '%s/%s' %(faddr,each))
+                        m = Presence(to=conn.fromjid,typ=None,frm = '%s/%s' %(faddr,each))
                         t = m.addChild(name='x',namespace=NS_MUC_USER)
                         p = t.addChild(name='item',attrs=conn.memberlist[event.target().lower()][each])
                         self.jabber.send(m)
@@ -904,7 +904,7 @@ class Transport:
                     for each in event.arguments()[1:]:
                         conn.memberlist[event.target().lower()][each]['role']='participant'
                         conn.memberlist[event.target().lower()][each]['affiliation']='none'
-                        m = Presence(to=conn.fromjid,typ='available',frm = '%s/%s' %(faddr,each))
+                        m = Presence(to=conn.fromjid,typ=None,frm = '%s/%s' %(faddr,each))
                         t = m.addChild(name='x',namespace=NS_MUC_USER)
                         p = t.addChild(name='item',attrs=conn.memberlist[event.target().lower()][each])
                         self.jabber.send(m)
@@ -996,10 +996,10 @@ class Transport:
         self.jabber.send(m)
 
     def irc_join(self,conn,event):
-        type = 'available'
+        type = None
         name = '%s%%%s' % (unicode(irclib.irc_lower(event.target()),conn.charset,'replace'), conn.server)
-        jid = '%s%%%s@%s' % (nick, conn.server, hostname)
         nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
+        jid = '%s%%%s@%s' % (nick, conn.server, hostname)
         if nick not in conn.memberlist[irclib.irc_lower(unicode(event.target(),'utf-8','replace').encode('utf-8'))].keys():
             conn.memberlist[irclib.irc_lower(event.target())][nick]={'affiliation':'none','role':'visitor','jid':jid}	
         m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname, nick))
@@ -1014,7 +1014,7 @@ class Transport:
     def irc_whoreply(self,conn,event):
         name = '%s%%%s' % (event.arguments()[0], conn.server)
         faddr = '%s@%s/%s' % (name, hostname, unicode(event.arguments()[4],conn.charset,'replace'))
-        m = Presence(to=conn.fromjid,typ='available',frm=faddr)
+        m = Presence(to=conn.fromjid,typ=None,frm=faddr)
         t = m.addChild(name='x', namespace=NS_MUC_USER)
         affiliation = 'none'
         role = 'none'
