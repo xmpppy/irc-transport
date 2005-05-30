@@ -343,9 +343,14 @@ class Transport:
             #Add code so people can see transport presence here
             #
             elif type == 'probe':
+	    	self.jabber.send(Presence(to=fromjid, frm = to))
                 if not userfile.has_key(event.getFrom().getStripped().encode('utf8')):
                     self.jabber.send(Presence(to=fromjid, frm=to, typ = 'unsubscribe'))
                     self.jabber.send(Presence(to=fromjid, frm=to, typ = 'unsubscribed'))
+            elif type == 'unavailable':
+	    	self.jabber.send(Presence(to=fromjid, frm = to, typ = 'unavailable'))
+	    else:
+	    	self.jabber.send(Presence(to=fromjid, frm = to))
         else:
             self.jabber.send(Error(event,MALFORMED_JID))
             return
