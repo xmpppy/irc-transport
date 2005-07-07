@@ -1,5 +1,6 @@
 #!/usr/bin/python
 # $Id$
+revision = 'CVS ' + '$Revision$'.split()[1]
 #
 # xmpp->IRC transport
 # Jan 2004 Copyright (c) Mike Albon
@@ -480,7 +481,7 @@ class Transport:
         to = event.getTo()
         id = event.getID()
         uname = platform.uname()
-        m = Iq(to = fromjid, frm = to, typ = 'result', queryNS=NS_VERSION, payload=[Node('name',payload='xmpp IRC Transport'), Node('version',payload='$Revision$'.replace('$','')),Node('os',payload='%s %s %s' % (uname[0],uname[2],uname[4]))])
+        m = Iq(to = fromjid, frm = to, typ = 'result', queryNS=NS_VERSION, payload=[Node('name',payload='xmpp IRC Transport'), Node('version',payload=revision),Node('os',payload=('%s %s %s' % (uname[0],uname[2],uname[4])).strip())])
         m.setID(id)
         self.jabber.send(m)
         raise xmpp.NodeProcessed
