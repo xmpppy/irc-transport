@@ -232,7 +232,9 @@ class Transport:
         self.irc = irc
 
     def register_handlers(self):
-        self.irc.add_global_handler('motd',self.irc_message)
+        self.irc.add_global_handler('motd',self.irc_motd)
+        self.irc.add_global_handler('motdstart',self.irc_motdstart)
+        self.irc.add_global_handler('endofmotd',self.irc_endofmotd)
         self.irc.add_global_handler('pubmsg',self.irc_message)
         self.irc.add_global_handler('pubnotice',self.irc_message)
         self.irc.add_global_handler('privmsg',self.irc_message)
@@ -478,7 +480,7 @@ class Transport:
         to = event.getTo()
         id = event.getID()
         uname = platform.uname()
-        m = Iq(to = fromjid, frm = to, typ = 'result', queryNS=NS_VERSION, payload=[Node('name',payload='xmpp IRC Transport'), Node('version',payload='$Revision 1.42$'.replace('$','')),Node('os',payload='%s %s %s' % (uname[0],uname[2],uname[4]))])
+        m = Iq(to = fromjid, frm = to, typ = 'result', queryNS=NS_VERSION, payload=[Node('name',payload='xmpp IRC Transport'), Node('version',payload='$Revision$'.replace('$','')),Node('os',payload='%s %s %s' % (uname[0],uname[2],uname[4]))])
         m.setID(id)
         self.jabber.send(m)
         raise xmpp.NodeProcessed
@@ -777,6 +779,7 @@ class Transport:
             c.joinchan = channel
             c.memberlist = {}
             c.chanmode = {}
+            c.pendingoperations = {}
             if userfile.has_key(fromstripped):
                 c.charset = userfile[fromstripped]['charset']
             else:
@@ -1052,6 +1055,28 @@ class Transport:
                 conn.memberlist[event.arguments()[0].lower()][unicode(event.arguments()[4],conn.charset,'replace')]={'affiliation':affiliation,'role':role,'jid':jid}
         except KeyError:
             pass
+
+    def irc_motdstart(self,conn,event):
+        try:
+            nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
+        except:
+            nick = conn.server
+        type = 'chat'
+        name = event.source()
+        name = '%s%%%s' %(nick,conn.server)
+        line,xhtml = colourparse(event.arguments()[0],conn.charset)
+        m = Message(to=conn.fromjid,body= line,typ=type,frm='%s@%s' %(name, hostname),payload = [xhtml])
+        conn.pendingoperations["motd"] = m
+
+    def irc_motd(self,conn,event):
+        line,xhtml = colourparse(event.arguments()[0],conn.charset)
+        m = conn.pendingoperations["motd"]
+        m.setBody(m.getBody() + '\x0a' + line)
+
+    def irc_endofmotd(self,conn,event):
+        m = conn.pendingoperations["motd"]
+        del conn.pendingoperations["motd"]
+        self.jabber.send(m)
 
     def irc_message(self,conn,event):
         try:
