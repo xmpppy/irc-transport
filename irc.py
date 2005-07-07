@@ -14,7 +14,7 @@
 #
 # All internal datastructures are held in UTF8 unicode objects.
 
-import xmpp, urllib2, sys, time, irclib, re, ConfigParser, os, select, codecs, shelve, socket
+import xmpp, urllib2, sys, time, irclib, re, ConfigParser, os, platform, select, codecs, shelve, socket
 from xmpp.protocol import *
 from xmpp.features import *
 from xmpp.browser import *
@@ -463,7 +463,7 @@ class Transport:
         raise xmpp.NodeProcessed
 
     def xmpp_iq_browse(self, con, event):
-        m = Iq(to = event.getFrom(), frm = event.getTo(), typ = 'result', queryNS = NS_BROWSE)
+        m = event.buildReply('result')
         if event.getTo() == hostname:
             m.setTagAttr('query','catagory','conference')
             m.setTagAttr('query','name','xmpp IRC Transport')
@@ -477,7 +477,8 @@ class Transport:
         fromjid = event.getFrom()
         to = event.getTo()
         id = event.getID()
-        m = Iq(to = fromjid, frm = to, typ = 'result', queryNS=NS_VERSION, payload=[Node('name',payload='xmpp IRC Transport'), Node('version',payload='early release 12feb04'),Node('os',payload='%s %s %s' % (os.uname()[0],os.uname()[2],os.uname()[4]))])
+        uname = platform.uname()
+        m = Iq(to = fromjid, frm = to, typ = 'result', queryNS=NS_VERSION, payload=[Node('name',payload='xmpp IRC Transport'), Node('version',payload='$Revision 1.42$'.replace('$','')),Node('os',payload='%s %s %s' % (uname[0],uname[2],uname[4]))])
         m.setID(id)
         self.jabber.send(m)
         raise xmpp.NodeProcessed
@@ -491,12 +492,12 @@ class Transport:
             channel, server = room.split('%')
         except ValueError:
             self.jabber.send(Error(event,MALFORMED_JID))
-            return
+            raise xmpp.NodeProcessed
         if fromjid not in self.users.keys() \
           or server not in self.users[fromjid].keys() \
           or channel not in self.users[fromjid][server].memberlist.keys():
             self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))
-            return
+            raise xmpp.NodeProcessed
         ns = event.getQueryNS()
         t = event.getQueryPayload()
         if t[0].getName() == 'item':
@@ -534,17 +535,17 @@ class Transport:
             channel, server = room.split('%')
         except ValueError:
             self.jabber.send(Error(event,MALFORMED_JID))
-            return
+            raise xmpp.NodeProcessed
         if fromjid not in self.users.keys() \
           or server not in self.users[fromjid].keys() \
           or channel not in self.users[fromjid][server].memberlist.keys():
             self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))
-            return
+            raise xmpp.NodeProcessed
         ns = event.getQueryNS()
         t = event.getQueryPayload()
         if self.users[fromjid][server].memberlist[channel][self.users[fromjid][server].nickname]['role'] != 'moderator' or self.users[fromjid][server].memberlist[channel][self.users[fromjid][server].nickname]['affiliation'] != 'owner':
             self.jabber.send(Error(event,ERR_FORBIDDEN))
-            return
+            raise xmpp.NodeProcessed
         for each in t:
             if t[0].getName() == 'item':
                 attr = t[0].getAttrs()
@@ -581,17 +582,17 @@ class Transport:
             channel, server = room.split('%')
         except ValueError:
             self.jabber.send(Error(event,MALFORMED_JID))
-            return
+            raise xmpp.NodeProcessed
         if fromjid not in self.users.keys() \
           or server not in self.users[fromjid].keys() \
           or channel not in self.users[fromjid][server].memberlist.keys():
             self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))
-            return
+            raise xmpp.NodeProcessed
         ns = event.getQueryNS()
         t = event.getQueryPayload()
         if self.users[fromjid][server].memberlist[channel][self.users[fromjid][server].nickname]['role'] != 'moderator' or self.users[fromjid][server].memberlist[channel][self.users[fromjid][server].nickname]['affiliation'] != 'owner':
             self.jabber.send(Error(event,ERR_FORBIDDEN))
-            return
+            raise xmpp.NodeProcessed
         datafrm = DataForm(data=self.users[fromjid][server].chanlist[channel])
         m = Iq(frm = to, to = fromjid, id = id, type='result', queryNS= ns, queryPayload = datafrm)
         m.setID(id)
@@ -607,17 +608,17 @@ class Transport:
             channel, server = room.split('%')
         except ValueError:
             self.jabber.send(Error(event,MALFORMED_JID))
-            return
+            raise xmpp.NodeProcessed
         if fromjid not in self.users.keys() \
           or server not in self.users[fromjid].keys() \
           or channel not in self.users[fromjid][server].memberlist.keys():
             self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))
-            return
+            raise xmpp.NodeProcessed
         ns = event.getQueryNS()
         t = event.getQueryPayload()
         if self.users[fromjid][server].memberlist[channel][self.users[fromjid][server].nickname]['role'] != 'moderator' or self.users[fromjid][server].memberlist[channel][self.users[fromjid][server].nickname]['affiliation'] != 'owner':
             self.jabber.send(Error(event,ERR_FORBIDDEN))
-            return
+            raise xmpp.NodeProcessed
         datadrm = event.getQueryPayload()[0].asDict()
         for each in dataform.keys():
             if datafrm[each] != self.users[fromjid][server].chanmode[each]:
@@ -699,6 +700,7 @@ class Transport:
             ucharset = query.getTagData('charset')
         else:
             self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
+            raise xmpp.NodeProcessed
         if not remove:
             if userfile.has_key(fromjid):
                 conf = userfile[fromjid]
@@ -708,10 +710,10 @@ class Transport:
                 codecs.lookup(ucharset)
             except LookupError:
                 self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
-                return
+                raise xmpp.NodeProcessed
             except ValueError:
                 self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
-                return
+                raise xmpp.NodeProcessed
             conf['charset']=ucharset
             userfile[fromjid]=conf
             self.jabber.send(Presence(to=event.getFrom(), frm = event.getTo()))
@@ -817,7 +819,7 @@ class Transport:
             if nick in conn.memberlist[each].keys():
                 del conn.memberlist[each][nick]
                 name = '%s%%%s' % (each, conn.server)
-                m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,unicode(irclib.irc_lower(event.source().split('!')[0]),conn.charset,'replace')))
+                m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')))
                 self.jabber.send(m)
                 if activitymessages == True:
                     line,xhtml = colourparse(event.arguments()[0],conn.charset)
@@ -971,10 +973,10 @@ class Transport:
         nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
         try:
             if nick in conn.memberlist[unicode(irclib.irc_lower(event.target()),conn.charset,'replace')].keys():
-                del conn.memberlist[unicode(irclib.irc_lower(event.target()),conn.charset,'replace')][unicode(event.source().split('!')[0],conn.charset,'replace')]
+                del conn.memberlist[unicode(irclib.irc_lower(event.target()),conn.charset,'replace')][unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')]
         except KeyError:
             pass
-        m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,unicode(event.source().split('!')[0],conn.charset,'replace')))
+        m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')))
         self.jabber.send(m)
         if activitymessages == True:
             m = Message(to=conn.fromjid, typ='groupchat',frm='%s@%s' % (name, hostname), body='%s (%s) has left' % (nick, unicode(irclib.nm_to_uh(event.source()),conn.charset,'replace')))
@@ -984,7 +986,7 @@ class Transport:
         type = 'unavailable'
         name = '%s%%%s' % (unicode(irclib.irc_lower(event.target()),conn.charset,'replace'), conn.server)
         jid = '%s%%%s@%s' % (unicode(irclib.irc_lower(event.arguments()[0]),conn.charset,'replace'), conn.server, hostname)
-        m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,unicode(irclib.irc_lower(event.arguments()[0]),conn.charset,'replace')))
+        m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,unicode(event.arguments()[0],conn.charset,'replace')))
         t=m.addChild(name='x',namespace=NS_MUC_USER)
         p=t.addChild(name='item',attrs={'affiliation':'none','role':'none','jid':jid})
         p.addChild(name='reason',payload=[colourparse(event.arguments()[1],conn.charset)][0])
@@ -996,7 +998,7 @@ class Transport:
         self.test_inuse(conn)
 
     def irc_topic(self,conn,event):
-        nick = unicode(event.source().split('!')[0],conn.charset,'replace')
+        nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
         if len(event.arguments())==2:
             channel = event.arguments()[0].lower()
             line,xhtml = colourparse(event.arguments()[1],conn.charset)
@@ -1139,7 +1141,6 @@ if __name__ == '__main__':
     userfile = shelve.open(userfilepath)
 
     ircobj = irclib.IRC(fn_to_add_socket=irc_add_conn,fn_to_remove_socket=irc_del_conn)
-    global connection
     connection = xmpp.client.Component(hostname,port)
     transport = Transport(connection,ircobj)
     transport.userfile = userfile
