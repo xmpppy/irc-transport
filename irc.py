@@ -305,8 +305,13 @@ class Transport:
         if irclib.is_channel(channel):
             if type == None:
                 if nick != '':
+                    x = event.getTag(name='x', namespace=NS_MUC)
+                    try:
+                        password = x.getTagData('password')
+                    except AttributeError:
+                        password = None
                     if not self.users.has_key(fromjid): # if a new user session
-                        c=self.irc_newconn(channel,server,nick,fromjid)
+                        c=self.irc_newconn(channel,server,nick,password,fromjid)
                         if c != None:
                             self.users[fromjid] = {server:c}
                     else:
@@ -317,7 +322,7 @@ class Transport:
                             elif self.users[fromjid].has_key(server): # if user already has a session open on same server
                                 self.irc_newroom(self.users[fromjid][server],channel)
                         else: # the other cases
-                            c=self.irc_newconn(channel,server,nick,fromjid)
+                            c=self.irc_newconn(channel,server,nick,password,fromjid)
                             if c != None:
                                 self.users[fromjid][server]=c
             elif type == 'unavailable':
@@ -772,9 +777,9 @@ class Transport:
             except:
                 self.irc_doquit(connection)
 
-    def irc_newconn(self,channel,server,nick,fromjid):
+    def irc_newconn(self,channel,server,nick,password,fromjid):
         try:
-            c=self.irc.server().connect(server,6667,nick,localaddress=localaddress)
+            c=self.irc.server().connect(server,6667,nick,password=password,localaddress=localaddress)
             c.fromjid = fromjid
             fromstripped = JID(fromjid).getStripped().encode('utf-8')
             c.joinchan = channel
