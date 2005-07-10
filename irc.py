@@ -258,6 +258,12 @@ class Transport:
         self.irc.add_global_handler('cannotsendtochan',self.irc_cannotsend)
         self.irc.add_global_handler('379',self.irc_redirect)
         self.irc.add_global_handler('welcome',self.irc_welcome)
+        self.irc.add_global_handler('whoisuser',self.irc_whoisuser)
+        self.irc.add_global_handler('whoisserver',self.irc_whoisserver)
+        self.irc.add_global_handler('whoisoperator',self.irc_whoisoperator)
+        self.irc.add_global_handler('whoisidle',self.irc_whoisidle)
+        self.irc.add_global_handler('whoischannels',self.irc_whoischannels)
+        self.irc.add_global_handler('endofwhois',self.irc_endofwhois)
         self.jabber.RegisterHandler('message',self.xmpp_message)
         self.jabber.RegisterHandler('presence',self.xmpp_presence)
         #Disco stuff now done by disco object
@@ -268,6 +274,7 @@ class Transport:
         self.jabber.RegisterHandler('iq',self.xmpp_iq_mucadmin_get,typ = 'get', ns=NS_MUC_ADMIN)
         self.jabber.RegisterHandler('iq',self.xmpp_iq_register_set,typ = 'set', ns=NS_REGISTER)
         self.jabber.RegisterHandler('iq',self.xmpp_iq_register_get,typ = 'get', ns=NS_REGISTER)
+        self.jabber.RegisterHandler('iq',self.xmpp_iq_vcard,typ = 'get', ns=NS_VCARD)
         self.disco = Browser()
         self.disco.PlugIn(self.jabber)
         self.command = Commands(self.disco)
@@ -444,6 +451,43 @@ class Transport:
                     self.irc_sendctcp('ACTION',self.users[fromjid][server],channel,event.getBody()[4:])
                 else:
                     self.irc_sendroom(self.users[fromjid][server],event.getTo().getResource(),event.getBody())
+
+    def xmpp_iq_vcard(self, con, event):
+        fromjid = event.getFrom()
+        to = event.getTo()
+        room = to.getNode().lower()
+        id = event.getID()
+        # need to store this ID somewhere for the return trip
+        try:
+            channel, server = room.split('%')
+        except ValueError:
+            self.jabber.send(Error(event,MALFORMED_JID))
+            raise xmpp.NodeProcessed
+            return
+        if not self.users.has_key(fromjid):
+            self.jabber.send(Error(event,ERR_REGISTRATION_REQUIRED))         # another candidate: ERR_SUBSCRIPTION_REQUIRED
+            raise xmpp.NodeProcessed
+            return
+        if not self.users[fromjid].has_key(server):
+            self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))        # Another candidate: ERR_REMOTE_SERVER_NOT_FOUND (but it means that server doesn't exist at all)
+            raise xmpp.NodeProcessed
+            return
+        nick = None
+        if not irclib.is_channel(channel):
+            # ARGH! need to know channel to find out nick. :(
+            nick = channel
+        else:
+            nick = event.getTo().getResource()
+        
+        m = Iq(to=fromjid,frm=to, typ='result')
+        m.setID(id)
+        p = m.addChild(name='vcard', namespace=NS_VCARD)
+        p.setTagData(tag='DESC', val='Additional Information:')
+        
+        self.users[fromjid][server].pendingoperations["whois:" + irclib.irc_lower(nick.encode(self.users[fromjid][server].charset))] = m
+        self.users[fromjid][server].whois([nick.encode(self.users[fromjid][server].charset)])
+            
+        raise xmpp.NodeProcessed
 
     def xmpp_iq_discoinfo(self, con, event):
         fromjid = event.getFrom()
@@ -1061,6 +1105,44 @@ class Transport:
                 conn.memberlist[event.arguments()[0].lower()][unicode(event.arguments()[4],conn.charset,'replace')]={'affiliation':affiliation,'role':role,'jid':jid}
         except KeyError:
             pass
+
+    def irc_whoisgetvcard(self,conn,event):    	
+        nick = irclib.irc_lower(event.arguments()[0])
+        m = conn.pendingoperations["whois:" + nick]
+        return m.getTag('vcard', namespace=NS_VCARD)
+        
+    def irc_whoisuser(self,conn,event):
+        p = self.irc_whoisgetvcard(conn,event)
+        p.setTagData(tag='FN', val=unicode(event.arguments()[4],conn.charset,'replace'))
+        p.setTagData(tag='NICKNAME', val=unicode(event.arguments()[0],conn.charset,'replace'))
+        e = p.addChild(name='EMAIL')
+        e.setTagData(tag='USERID', val=unicode(event.arguments()[1],conn.charset,'replace') + '@' + unicode(event.arguments()[2],conn.charset,'replace'))
+        
+    def irc_whoisserver(self,conn,event):
+        p = self.irc_whoisgetvcard(conn,event)
+        o = p.addChild(name='ORG')
+        o.setTagData(tag='ORGUNIT', val=unicode(event.arguments()[1],conn.charset,'replace'))
+        o.setTagData(tag='ORGNAME', val=unicode(event.arguments()[2],conn.charset,'replace'))
+        
+    def irc_whoisoperator(self,conn,event):
+        p = self.irc_whoisgetvcard(conn,event)
+        p.setTagData(tag='ROLE', val=unicode(event.arguments()[1],conn.charset,'replace'))
+        
+    def irc_whoisidle(self,conn,event):
+        p = self.irc_whoisgetvcard(conn,event)
+        p.setTagData(tag='DESC', val=p.getTagData(tag='DESC') + '\x0a' + 'Seconds Idle: ' + unicode(event.arguments()[1],conn.charset,'replace'))
+        if len(event.arguments()) > 3:
+            p.setTagData(tag='DESC', val=p.getTagData(tag='DESC') + '\x0a' + 'Signon Time: ' + unicode(event.arguments()[2],conn.charset,'replace'))
+        
+    def irc_whoischannels(self,conn,event):
+        p = self.irc_whoisgetvcard(conn,event)
+        p.setTagData(tag='TITLE', val=unicode(event.arguments()[1],conn.charset,'replace'))
+        
+    def irc_endofwhois(self,conn,event):
+        nick = irclib.irc_lower(event.arguments()[0])
+        m = conn.pendingoperations["whois:" + nick]
+        del conn.pendingoperations["whois:" + nick]
+        self.jabber.send(m)
 
     def irc_motdstart(self,conn,event):
         try:
