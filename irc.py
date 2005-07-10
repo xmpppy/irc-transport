@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # $Id$
-revision = 'CVS ' + '$Revision$'.split()[1]
+version = 'CVS ' + '$Revision$'.split()[1]
 #
 # xmpp->IRC transport
 # Jan 2004 Copyright (c) Mike Albon
@@ -530,7 +530,7 @@ class Transport:
         to = event.getTo()
         id = event.getID()
         uname = platform.uname()
-        m = Iq(to = fromjid, frm = to, typ = 'result', queryNS=NS_VERSION, payload=[Node('name',payload='xmpp IRC Transport'), Node('version',payload=revision),Node('os',payload=('%s %s %s' % (uname[0],uname[2],uname[4])).strip())])
+        m = Iq(to = fromjid, frm = to, typ = 'result', queryNS=NS_VERSION, payload=[Node('name',payload='xmpp IRC Transport'), Node('version',payload=version),Node('os',payload=('%s %s %s' % (uname[0],uname[2],uname[4])).strip())])
         m.setID(id)
         self.jabber.send(m)
         raise xmpp.NodeProcessed
@@ -1204,7 +1204,7 @@ class Transport:
                 m = Message(to=conn.fromjid,body= line,typ=type,frm='%s@%s' %(name, hostname),payload = [xhtml])
             self.jabber.send(m)
         elif event.arguments()[0] == 'VERSION':
-            self.irc_sendctcp('VERSION',conn,event.source(),'xmpp IRC Transport')
+            self.irc_sendctcp('VERSION',conn,irclib.nm_to_n(event.source()),'xmpp IRC Transport ' + version)
 
     def xmpp_disconnect(self):
         for each in self.users.keys():
