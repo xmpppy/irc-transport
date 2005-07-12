@@ -264,6 +264,8 @@ class Transport:
         self.irc.add_global_handler('whoisidle',self.irc_whoisidle)
         self.irc.add_global_handler('whoischannels',self.irc_whoischannels)
         self.irc.add_global_handler('endofwhois',self.irc_endofwhois)
+        self.irc.add_global_handler('list',self.irc_list)
+        self.irc.add_global_handler('listend',self.irc_listend)
         self.jabber.RegisterHandler('message',self.xmpp_message)
         self.jabber.RegisterHandler('presence',self.xmpp_presence)
         #Disco stuff now done by disco object
@@ -289,11 +291,43 @@ class Transport:
 
     # New Disco Handlers
     def xmpp_base_disco(self, con, event, type):
-        #Type is either 'info' or 'items'
-        if type == 'info':
-            return {'ids':[{'category':'conference','type':'irc','name':'IRC Transport'}],'features':[xmpp.NS_REGISTER,xmpp.NS_VERSION,NS_MUC,NS_COMMAND]}
-        if type == 'items':
-            return []
+        fromjid = event.getFrom().__str__()
+        to = event.getTo()
+        room = to.getNode().lower()
+        nick = to.getResource()
+        try:
+            channel, server = room.split('%')
+        except ValueError:
+            channel=''
+            server=room
+        if to == hostname:
+            #Type is either 'info' or 'items'
+            if type == 'info':
+                return {'ids':[{'category':'conference','type':'irc','name':'IRC Transport'}],'features':[xmpp.NS_REGISTER,xmpp.NS_VERSION,NS_MUC,NS_COMMAND]}
+            if type == 'items':
+                fromjid = str(event.getFrom())
+                list = [{'node':NS_COMMANDS,'name':'IRC Transport Commands','jid':hostname}]
+                if self.users.has_key(fromjid):
+                    for each in self.users[fromjid].keys():
+                        list.append({'name':each,'jid':'%s@%s' % (each, hostname)})
+                return list
+        elif channel == '':
+            if type == 'info':
+                return {'ids':[{'category':'conference','type':'irc','name':server}],'features':[NS_MUC]}
+            if type == 'items':
+                rep=event.buildReply('result')
+                q=rep.getTag('query')
+                self.users[fromjid][server].pendingoperations["list"] = rep
+                self.users[fromjid][server].list()
+                raise NodeProcessed
+        elif irclib.is_channel(channel):
+            if type == 'info':
+                return {'ids':[{'category':'conference','type':'irc','name':channel}],'features':[NS_MUC]}
+            if type == 'items':
+                return []
+        else:
+            self.jabber.send(Error(event,MALFORMED_JID))
+            raise NodeProcessed
 
     #XMPP Handlers
     def xmpp_presence(self, con, event):
@@ -1143,6 +1177,18 @@ class Transport:
         m = conn.pendingoperations["whois:" + nick]
         del conn.pendingoperations["whois:" + nick]
         self.jabber.send(m)
+
+    def irc_list(self,conn,event):
+        chan = event.arguments()[0]
+        if irclib.is_channel(chan):
+            rep = conn.pendingoperations["list"]
+            q=rep.getTag('query')
+            q.addChild('item',{'name':chan,'jid':'%s%%%s@%s' % (chan, conn.server, hostname)})
+        
+    def irc_listend(self,conn,event):
+        rep = conn.pendingoperations["list"]
+        del conn.pendingoperations["list"]
+        self.jabber.send(rep)
 
     def irc_motdstart(self,conn,event):
         try:
