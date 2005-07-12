@@ -23,6 +23,8 @@ from xmpp.commands import *
 from jep0133 import *
 import xmpp.commands
 import jep0133
+import jep0106
+from jep0106 import *
 
 #Global definitions
 True = 1
@@ -300,6 +302,7 @@ class Transport:
         except ValueError:
             channel=''
             server=room
+        channel = JIDDecode(channel)
         if to == hostname:
             #Type is either 'info' or 'items'
             if type == 'info':
@@ -1183,7 +1186,7 @@ class Transport:
         if irclib.is_channel(chan):
             rep = conn.pendingoperations["list"]
             q=rep.getTag('query')
-            q.addChild('item',{'name':chan,'jid':'%s%%%s@%s' % (chan, conn.server, hostname)})
+            q.addChild('item',{'name':chan,'jid':'%s%%%s@%s' % (JIDEncode(chan), conn.server, hostname)})
         
     def irc_listend(self,conn,event):
         rep = conn.pendingoperations["list"]
