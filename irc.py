@@ -298,7 +298,7 @@ class Transport:
     #XMPP Handlers
     def xmpp_presence(self, con, event):
         # Add ACL support
-        fromjid = str(event.getFrom())
+        fromjid = event.getFrom().__str__()
         fromstripped = fromjid.encode('utf-8')
         type = event.getType()
         #if type == None: type = 'available'
@@ -389,7 +389,7 @@ class Transport:
 
     def xmpp_message(self, con, event):
         type = event.getType()
-        fromjid = str(event.getFrom())
+        fromjid = event.getFrom().__str__()
         to = event.getTo()
         room = to.getNode().lower()
         try:
