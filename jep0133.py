@@ -41,7 +41,8 @@ class Active_Users_Command(xmpp.commands.Command_Handler_Prototype):
         if request.getFrom().getStripped() in administrators:
             reply = request.buildReply('result')
             form = DataForm(typ='result',data=[DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='The list of active users',name='activeuserjids',value=self.transport.users.keys(),typ='jid-multi')])
-            reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=form)
+            a=reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'})
+            a.addChild(payload=[form])
             self._owner.send(reply)
         else:
             self._owner.send(Error(request,ERR_FORBIDDEN))
@@ -65,7 +66,8 @@ class Registered_Users_Command(xmpp.commands.Command_Handler_Prototype):
         if request.getFrom().getStripped() in administrators:
             reply = request.buildReply('result')
             form = DataForm(typ='result',data=[DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='The list of registered users',name='registereduserjids',value=self.transport.userfile.keys(),typ='jid-multi')])
-            reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=form)
+            a=reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'})
+            a.addChild(payload=[form])
             self._owner.send(reply)
         else:
             self._owner.send(Error(request,ERR_FORBIDDEN))
