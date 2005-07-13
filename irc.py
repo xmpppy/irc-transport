@@ -946,7 +946,7 @@ class Transport:
 
     def irc_nicknameinuse(self,conn,event):
         error=ErrorNode(ERR_CONFLICT,text='Nickname is in use')
-        self.jabber.send(Error(Presence(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' %(conn.joinchan, conn.server, hostname)),error,reply=0))
+        self.jabber.send(Presence(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' %(conn.joinchan, conn.server, hostname),payload=[error]))
 
     def irc_nosuchchannel(self,conn,event):
         error=ErrorNode(ERR_ITEM_NOT_FOUND,'The channel is not found')
