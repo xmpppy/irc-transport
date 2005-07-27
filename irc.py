@@ -1184,6 +1184,7 @@ class Transport:
     def irc_list(self,conn,event):
         chan = event.arguments()[0]
         if irclib.is_channel(chan):
+            chan = unicode(chan,conn.charset,'replace')
             rep = conn.pendingoperations["list"]
             q=rep.getTag('query')
             q.addChild('item',{'name':chan,'jid':'%s%%%s@%s' % (JIDEncode(chan), conn.server, hostname)})
