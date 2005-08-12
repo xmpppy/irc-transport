@@ -197,6 +197,11 @@ def colourparse(str,charset):
         html = ''
     return s,html
 
+_xlat = {91: u'{', 92: u'|', 93: u'}', 94: u'~'}
+def irc_ulower(str):
+    if str is None: return str
+    if len(str) == 0: return str
+    return str.translate(_xlat).lower()
 
 def connectxmpp(handlerreg = None):
     connected = connection.connect((server,port))
@@ -295,7 +300,7 @@ class Transport:
     def xmpp_base_disco(self, con, event, type):
         fromjid = event.getFrom().__str__()
         to = event.getTo()
-        room = to.getNode().lower()
+        room = irc_ulower(to.getNode())
         nick = to.getResource()
         try:
             channel, server = room.split('%')
@@ -340,7 +345,7 @@ class Transport:
         type = event.getType()
         #if type == None: type = 'available'
         to = event.getTo()
-        room = to.getNode().lower()
+        room = irc_ulower(to.getNode())
         nick = to.getResource()
         try:
             channel, server = room.split('%')
@@ -428,7 +433,7 @@ class Transport:
         type = event.getType()
         fromjid = event.getFrom().__str__()
         to = event.getTo()
-        room = to.getNode().lower()
+        room = irc_ulower(to.getNode())
         try:
             if event.getSubject.strip() == '':
                 event.setSubject(None)
@@ -492,7 +497,7 @@ class Transport:
     def xmpp_iq_vcard(self, con, event):
         fromjid = event.getFrom()
         to = event.getTo()
-        room = to.getNode().lower()
+        room = irc_ulower(to.getNode())
         id = event.getID()
         # need to store this ID somewhere for the return trip
         try:
@@ -521,7 +526,7 @@ class Transport:
         p = m.addChild(name='vcard', namespace=NS_VCARD)
         p.setTagData(tag='DESC', val='Additional Information:')
         
-        self.users[fromjid][server].pendingoperations["whois:" + irclib.irc_lower(nick.encode(self.users[fromjid][server].charset))] = m
+        self.users[fromjid][server].pendingoperations["whois:" + irc_ulower(nick)] = m
         self.users[fromjid][server].whois([nick.encode(self.users[fromjid][server].charset)])
             
         raise xmpp.NodeProcessed
@@ -575,7 +580,7 @@ class Transport:
     def xmpp_iq_mucadmin_get(self, con, event):
         fromjid = event.getFrom()
         to = event.getTo()
-        room = to.getNode().lower()
+        room = irc_ulower(to.getNode())
         id = event.getID()
         try:
             channel, server = room.split('%')
@@ -618,7 +623,7 @@ class Transport:
     def xmpp_iq_mucadmin_set(self, con, event):
         fromjid = event.getFrom()
         to = event.getTo()
-        room = to.getNode().lower()
+        room = irc_ulower(to.getNode())
         id = event.getID()
         try:
             channel, server = room.split('%')
@@ -665,7 +670,7 @@ class Transport:
     def xmpp_iq_mucowner_get(self, con, event):
         fromjid = event.getFrom()
         to = event.getTo()
-        room = to.getNode().lower()
+        room = irc_ulower(to.getNode())
         id = event.getID()
         try:
             channel, server = room.split('%')
@@ -691,7 +696,7 @@ class Transport:
     def xmpp_iq_mucowner_set(self, con, event):
         fromjid = event.getFrom()
         to = event.getTo()
-        room = to.getNode().lower()
+        room = irc_ulower(to.getNode())
         id = event.getID()
         try:
             channel, server = room.split('%')
@@ -909,7 +914,7 @@ class Transport:
             if nick in conn.memberlist[each].keys():
                 del conn.memberlist[each][nick]
                 name = '%s%%%s' % (each, conn.server)
-                m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')))
+                m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,nick))
                 self.jabber.send(m)
                 if activitymessages == True:
                     line,xhtml = colourparse(event.arguments()[0],conn.charset)
@@ -969,7 +974,7 @@ class Transport:
         old = '%s%%%s@%s'% (unicode(event.arguments()[0],conn.charset, 'replace'),conn.server, hostname)
         error=ErrorNode(ERR_REDIRECT,new)
         self.jabber.send(Presence(to=conn.fromjid, typ='error', frm = old, payload=[error]))
-        conn.memberlist[event.arguments()[1]]={}
+        conn.memberlist[unicode(event.arguments()[1],conn.charset,'replace')]={}
         try:
            conn.part(event.arguments()[1])
         except:
@@ -981,44 +986,48 @@ class Transport:
     # Issues:
     # Multiple +b's currently not handled
     # +l or -l with no parameter not handled
-        faddr = '%s%%%s@%s' %(unicode(event.target().lower(),conn.charset,'replace'),conn.server,hostname)
+        channel = irc_ulower(unicode(event.target(),conn.charset,'replace'))
+        faddr = '%s%%%s@%s' %(channel,conn.server,hostname)
         if irclib.is_channel(event.target()):
             if event.arguments()[0] == '+o':
                 # Give Chanop
-                if unicode(irclib.irc_lower(event.target()),conn.charset,'replace') in conn.memberlist.keys():
+                if channel in conn.memberlist.keys():
                     for each in event.arguments()[1:]:
-                        conn.memberlist[event.target().lower()][unicode(each,conn.charset,'replace')]['role']='moderator'
+                        nick = unicode(each,conn.charset,'replace')
+                        conn.memberlist[channel][nick]['role']='moderator'
                         if each == conn.nickname:
-                            conn.memberlist[event.target().lower()][unicode(each,conn.charset,'replace')]['affiliation']='owner'
-                        m = Presence(to=conn.fromjid,typ=None,frm = '%s/%s' %(faddr,unicode(each,conn.charset,'replace')))
+                            conn.memberlist[channel][nick]['affiliation']='owner'
+                        m = Presence(to=conn.fromjid,typ=None,frm = '%s/%s' %(faddr,nick))
                         t = m.addChild(name='x',namespace=NS_MUC_USER)
-                        p = t.addChild(name='item',attrs=conn.memberlist[unicode(event.target().lower(),conn.charset,'replace')][unicode(each,conn.charset,'replace')])
+                        p = t.addChild(name='item',attrs=conn.memberlist[channel][nick])
                         self.jabber.send(m)
             elif event.arguments()[0] in ['-o', '-v']:
                 # Take Chanop or Voice
-                if unicode(irclib.irc_lower(event.target()),conn.charset,'replace') in conn.memberlist.keys():
+                if channel in conn.memberlist.keys():
                     for each in event.arguments()[1:]:
-                        conn.memberlist[event.target().lower()][unicode(each,conn.charset,'replace')]['role']='visitor'
-                        conn.memberlist[event.target().lower()][unicode(each,conn.charset,'replace')]['affiliation']='none'
-                        m = Presence(to=conn.fromjid,typ=None,frm = '%s/%s' %(faddr,unicode(each,conn.charset,'replace')))
+                        nick = unicode(each,conn.charset,'replace')
+                        conn.memberlist[channel][nick]['role']='visitor'
+                        conn.memberlist[channel][nick]['affiliation']='none'
+                        m = Presence(to=conn.fromjid,typ=None,frm = '%s/%s' %(faddr,nick))
                         t = m.addChild(name='x',namespace=NS_MUC_USER)
-                        p = t.addChild(name='item',attrs=conn.memberlist[unicode(event.target().lower(),conn.charset,'replace')][unicode(each,conn.charset,'replace')])
+                        p = t.addChild(name='item',attrs=conn.memberlist[channel][nick])
                         self.jabber.send(m)
             elif event.arguments()[0] == '+v':
                 # Give Voice
-                if unicode(irclib.irc_lower(event.target().lower()),conn.charset,'replace') in conn.memberlist.keys():
+                if channel in conn.memberlist.keys():
                     for each in event.arguments()[1:]:
-                        conn.memberlist[event.target().lower()][unicode(each,conn.charset,'replace')]['role']='participant'
-                        conn.memberlist[event.target().lower()][unicode(each,conn.charset,'replace')]['affiliation']='none'
-                        m = Presence(to=conn.fromjid,typ=None,frm = '%s/%s' %(faddr,unicode(each,conn.charset,'replace')))
+                        nick = unicode(each,conn.charset,'replace')
+                        conn.memberlist[channel][nick]['role']='participant'
+                        conn.memberlist[channel][nick]['affiliation']='none'
+                        m = Presence(to=conn.fromjid,typ=None,frm = '%s/%s' %(faddr,nick))
                         t = m.addChild(name='x',namespace=NS_MUC_USER)
-                        p = t.addChild(name='item',attrs=conn.memberlist[event.target().lower()][each])
+                        p = t.addChild(name='item',attrs=conn.memberlist[channel][nick])
                         self.jabber.send(m)
 
     def irc_chanmode(self,conn,event):
         # Very buggy, multiple items cases, ban etc.
-        faddr = '%s%%%s@%s' %(unicode(event.target().lower(),conn.charset,'replace'),conn.server,hostname)
-        channel = unicode(event.target().lower(),conn.charset,'replace')
+        channel = irc_ulower(unicode(event.target(),conn.charset,'replace'))
+        faddr = '%s%%%s@%s' %(channel,conn.server,hostname)
         plus = None
         for each in event.arguments()[0]:
             if each == '+':
@@ -1034,39 +1043,40 @@ class Transport:
                 #for each in event.arguments()[1:]:
                 #    conn.who(channel,each)
             elif each == 'p': #Private Room
-                conn.chanmode[event.target().lower()]['private'] = plus
+                conn.chanmode[channel]['private'] = plus
             elif each == 's': #Secret
-                conn.chanmode[event.target().lower()]['secret'] = plus
+                conn.chanmode[channel]['secret'] = plus
             elif each == 'i': #invite only
-                conn.chanmode[event.target().lower()]['invite'] = plus
+                conn.chanmode[channel]['invite'] = plus
             elif each == 't': #only chanop can set topic
-                conn.chanmode[event.target().lower()]['topic'] = plus
+                conn.chanmode[channel]['topic'] = plus
             elif each == 'n': #no not in channel messages
-                conn.chanmode[event.target().lower()]['notmember'] = plus
+                conn.chanmode[channel]['notmember'] = plus
             elif each == 'm': #moderated chanel
-                conn.chanmode[event.target().lower()]['moderated'] = plus
+                conn.chanmode[channel]['moderated'] = plus
             elif each == 'l': #set channel limit
-                conn.chanmode[event.target().lower()]['private'] = event.arguments()[1]
+                conn.chanmode[channel]['private'] = event.arguments()[1]
             elif each == 'b': #ban users
                 # Need to fix multiple ban case.
                 if plus:
-                    conn.chanmode[unicode(event.target().lower(),conn.charset,'replace')]['banlist'].append(unicode(event.arguments()[1],conn.charset,'replace'))
+                    conn.chanmode[channel]['banlist'].append(unicode(event.arguments()[1],conn.charset,'replace'))
                 else:
-                    if unicode(event.arguments()[1],conn.charset,'replace') in conn.chanmode[unicode(event.target().lower(),conn.charset,'replace')]['banlist']:
-                        conn.chanmode[unicode(event.target().lower(),conn.charset,'replace')]['banlist'].remove(unicode(event.arguments()[1],conn.charset,'replace'))
+                    if unicode(event.arguments()[1],conn.charset,'replace') in conn.chanmode[channel]['banlist']:
+                        conn.chanmode[channel]['banlist'].remove(unicode(event.arguments()[1],conn.charset,'replace'))
             elif each == 'k': #set channel key
                 pass
 
     def irc_part(self,conn,event):
         type = 'unavailable'
-        name = '%s%%%s' % (unicode(irclib.irc_lower(event.target()),conn.charset,'replace'), conn.server)
+        channel = irc_ulower(unicode(event.target(),conn.charset,'replace'))
+        name = '%s%%%s' % (channel, conn.server)
         nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
         try:
-            if nick in conn.memberlist[unicode(irclib.irc_lower(event.target()),conn.charset,'replace')].keys():
-                del conn.memberlist[unicode(irclib.irc_lower(event.target()),conn.charset,'replace')][unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')]
+            if nick in conn.memberlist[channel].keys():
+                del conn.memberlist[channel][nick]
         except KeyError:
             pass
-        m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')))
+        m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,nick))
         self.jabber.send(m)
         if activitymessages == True:
             m = Message(to=conn.fromjid, typ='groupchat',frm='%s@%s' % (name, hostname), body='%s (%s) has left' % (nick, unicode(irclib.nm_to_uh(event.source()),conn.charset,'replace')))
@@ -1074,8 +1084,9 @@ class Transport:
 
     def irc_kick(self,conn,event):
         type = 'unavailable'
-        name = '%s%%%s' % (unicode(irclib.irc_lower(event.target()),conn.charset,'replace'), conn.server)
-        jid = '%s%%%s@%s' % (unicode(irclib.irc_lower(event.arguments()[0]),conn.charset,'replace'), conn.server, hostname)
+        channel = irc_ulower(unicode(event.target(),conn.charset,'replace'))
+        name = '%s%%%s' % (channel, conn.server)
+        jid = '%s%%%s@%s' % (irc_ulower(unicode(event.arguments()[0],conn.charset,'replace')), conn.server, hostname)
         m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname,unicode(event.arguments()[0],conn.charset,'replace')))
         t=m.addChild(name='x',namespace=NS_MUC_USER)
         p=t.addChild(name='item',attrs={'affiliation':'none','role':'none','jid':jid})
@@ -1083,34 +1094,35 @@ class Transport:
         t.addChild(name='status',attrs={'code':'307'})
         self.jabber.send(m)
         if event.arguments()[0] == conn.nickname:
-            if conn.memberlist.has_key(unicode(irclib.irc_lower(event.target()),conn.charset,'replace')):
-                del conn.memberlist[unicode(irclib.irc_lower(event.target()),conn.charset,'replace')]
+            if conn.memberlist.has_key(channel):
+                del conn.memberlist[channel]
         self.test_inuse(conn)
 
     def irc_topic(self,conn,event):
         nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
         if len(event.arguments())==2:
-            channel = event.arguments()[0].lower()
+            channel = irc_ulower(unicode(event.arguments()[0],conn.charset,'replace'))
             line,xhtml = colourparse(event.arguments()[1],conn.charset)
         else:
-            channel = event.target().lower()
+            channel = irc_ulower(unicode(event.target(),conn.charset,'replace'))
             line,xhtml = colourparse(event.arguments()[0],conn.charset)
         if activitymessages == True:
-            m = Message(to=conn.fromjid,frm = '%s%%%s@%s/%s' % (unicode(channel,conn.charset,'replace'),conn.server,hostname,nick),body='/me set the topic to: %s' % line, typ='groupchat', subject = line)
+            m = Message(to=conn.fromjid,frm = '%s%%%s@%s/%s' % (channel,conn.server,hostname,nick), body='/me set the topic to: %s' % line, typ='groupchat', subject = line)
         else:
-            m = Message(to=conn.fromjid,frm = '%s%%%s@%s/%s' % (unicode(channel,conn.charset,'replace'),conn.server,hostname,nick), typ='groupchat', subject = line)
+            m = Message(to=conn.fromjid,frm = '%s%%%s@%s/%s' % (channel,conn.server,hostname,nick), typ='groupchat', subject = line)
         self.jabber.send(m)
 
     def irc_join(self,conn,event):
         type = None
-        name = '%s%%%s' % (unicode(irclib.irc_lower(event.target()),conn.charset,'replace'), conn.server)
+        channel = irc_ulower(unicode(event.target(),conn.charset,'replace'))
+        name = '%s%%%s' % (channel, conn.server)
         nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
         jid = '%s%%%s@%s' % (nick, conn.server, hostname)
-        if nick not in conn.memberlist[irclib.irc_lower(unicode(event.target(),'utf-8','replace').encode('utf-8'))].keys():
-            conn.memberlist[irclib.irc_lower(event.target())][nick]={'affiliation':'none','role':'visitor','jid':jid}	
+        if nick not in conn.memberlist[channel].keys():
+            conn.memberlist[channel][nick]={'affiliation':'none','role':'visitor','jid':jid}	
         m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname, nick))
         t=m.addChild(name='x',namespace=NS_MUC_USER)
-        p=t.addChild(name='item',attrs=conn.memberlist[unicode(irclib.irc_lower(event.target()),conn.charset,'replace')][nick])
+        p=t.addChild(name='item',attrs=conn.memberlist[channel][nick])
         #print m.__str__()
         self.jabber.send(m)
         if activitymessages == True:
@@ -1118,8 +1130,9 @@ class Transport:
             self.jabber.send(m)
 
     def irc_whoreply(self,conn,event):
-        name = '%s%%%s' % (unicode(event.arguments()[0],conn.charset,'replace'), conn.server)
-        faddr = '%s@%s/%s' % (name, hostname, unicode(event.arguments()[4],conn.charset,'replace'))
+        channel = irc_ulower(unicode(event.arguments()[0],conn.charset,'replace'))
+        nick = unicode(event.arguments()[4],conn.charset,'replace')
+        faddr = '%s%%%s@%s/%s' % (channel, conn.server, hostname, nick)
         m = Presence(to=conn.fromjid,typ=None,frm=faddr)
         t = m.addChild(name='x', namespace=NS_MUC_USER)
         affiliation = 'none'
@@ -1138,13 +1151,13 @@ class Transport:
         p=t.addChild(name='item',attrs={'affiliation':affiliation,'role':role,'jid':jid})
         self.jabber.send(m)
         try:
-            if (event.arguments()[0] != '*') and (unicode(event.arguments()[4],conn.charset,'replace') not in conn.memberlist[event.arguments()[0].lower()].keys()):
-                conn.memberlist[event.arguments()[0].lower()][unicode(event.arguments()[4],conn.charset,'replace')]={'affiliation':affiliation,'role':role,'jid':jid}
+            if (event.arguments()[0] != '*') and (nick not in conn.memberlist[channel].keys()):
+                conn.memberlist[channel][nick]={'affiliation':affiliation,'role':role,'jid':jid}
         except KeyError:
             pass
 
     def irc_whoisgetvcard(self,conn,event):    	
-        nick = irclib.irc_lower(event.arguments()[0])
+        nick = irc_ulower(unicode(event.arguments()[0],conn.charset,'replace'))
         m = conn.pendingoperations["whois:" + nick]
         return m.getTag('vcard', namespace=NS_VCARD)
         
@@ -1176,7 +1189,7 @@ class Transport:
         p.setTagData(tag='TITLE', val=unicode(event.arguments()[1],conn.charset,'replace'))
         
     def irc_endofwhois(self,conn,event):
-        nick = irclib.irc_lower(event.arguments()[0])
+        nick = irc_ulower(unicode(event.arguments()[0],conn.charset,'replace'))
         m = conn.pendingoperations["whois:" + nick]
         del conn.pendingoperations["whois:" + nick]
         self.jabber.send(m)
@@ -1223,7 +1236,7 @@ class Transport:
             nick = conn.server
         if irclib.is_channel(event.target()):
             type = 'groupchat'
-            room = '%s%%%s' %(unicode(event.target().lower(),conn.charset,'replace'),conn.server)
+            room = '%s%%%s' %(irc_ulower(unicode(event.target(),conn.charset,'replace')),conn.server)
             line,xhtml = colourparse(event.arguments()[0],conn.charset)
             #print (line,xhtml)
             m = Message(to=conn.fromjid,body= line,typ=type,frm='%s@%s/%s' %(room, hostname,nick),payload = [xhtml])
@@ -1240,7 +1253,7 @@ class Transport:
         if event.arguments()[0] == 'ACTION':
             if irclib.is_channel(event.target()):
                 type = 'groupchat'
-                room = '%s%%%s' %(unicode(event.target().lower(),conn.charset,'replace'),conn.server)
+                room = '%s%%%s' %(irc_ulower(unicode(event.target(),conn.charset,'replace')),conn.server)
                 line,xhtml = colourparse('/me '+event.arguments()[1],conn.charset)
                 m = Message(to=conn.fromjid,body=line,typ=type,frm='%s@%s/%s' %(room, hostname,nick),payload =[xhtml])
             else:
