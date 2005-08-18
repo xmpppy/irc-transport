@@ -25,6 +25,7 @@ import xmpp.commands
 import jep0133
 import jep0106
 from jep0106 import *
+import traceback
 
 #Global definitions
 True = 1
@@ -1315,6 +1316,16 @@ if __name__ == '__main__':
     else:
         userfilepath = 'user.dbm'
     userfile = shelve.open(userfilepath)
+    logfile = None
+    if configfile.has_option('transport','LogFile'):
+        logfilepath = configfile.get('transport','LogFile')
+        logfile = open(logfilepath,'a')
+    fatalerrors = True
+    if configfile.has_option('transport','FatalErrors'):
+        if not configfile.get('transport','FatalErrors').lower() in ['true', '1', 'yes', 'false', '0', 'no']:
+             print "Invalid setting for FatalErrors: " + configfile.get('transport','FatalErrors')
+             sys.exit(1)
+        fatalerrors = configfile.get('transport','FatalErrors').lower() in ['true', '1', 'yes']
 
     ircobj = irclib.IRC(fn_to_add_socket=irc_add_conn,fn_to_remove_socket=irc_del_conn)
     connection = xmpp.client.Component(hostname,port)
@@ -1346,6 +1357,23 @@ if __name__ == '__main__':
                     connection.Process(1)
                 except IOError:
                     transport.xmpp_disconnect()
+                except:
+                    if logfile != None:
+                        traceback.print_exc(file=logfile)
+                        logfile.flush()
+                    if fatalerrors:
+                        _pendingException = sys.exc_info()
+                        raise _pendingException[0], _pendingException[1], _pendingException[2]
+                    traceback.print_exc()
                 if not connection.isConnected():  transport.xmpp_disconnect()
             else:
-                ircobj.process_data([each])
+                try:
+                    ircobj.process_data([each])
+                except:
+                    if logfile != None:
+                        traceback.print_exc(file=logfile)
+                        logfile.flush()
+                    if fatalerrors:
+                        _pendingException = sys.exc_info()
+                        raise _pendingException[0], _pendingException[1], _pendingException[2]
+                    traceback.print_exc()
