@@ -526,7 +526,7 @@ class Transport:
         
         m = Iq(to=fromjid,frm=to, typ='result')
         m.setID(id)
-        p = m.addChild(name='vcard', namespace=NS_VCARD)
+        p = m.addChild(name='vCard', namespace=NS_VCARD)
         p.setTagData(tag='DESC', val='Additional Information:')
         
         self.users[fromjid][server].pendingoperations["whois:" + irc_ulower(nick)] = m
