@@ -41,11 +41,10 @@ socketlist = {}
 timerlist = []
 
 MALFORMED_JID=ErrorNode(ERR_JID_MALFORMED,text='Invalid room, must be in form #room%server')
-NS_MUC = 'http://jabber.org/protocol/muc'
-NS_MUC_USER = NS_MUC+'#user'
-NS_MUC_ADMIN = NS_MUC+'#admin'
-NS_MUC_OWNER = NS_MUC+'#owner'
-NS_COMMAND = 'http://jabber.org/protocol/commands'
+NODE_REGISTERED_SERVERS='registered-servers'
+NODE_ONLINE_SERVERS='online-servers'
+NODE_ONLINE_CHANNELS='online-channels'
+NODE_ACTIVE_CHANNELS='active-channels'
 irccolour = ['#FFFFFF','#000000','#0000FF','#00FF00','#FF0000','#F08000','#8000FF','#FFF000','#FFFF00','#80FF00','#00FF80','#00FFFF','#0080FF','#FF80FF','#808080','#A0A0A0']
 def irc_add_conn(con):
     socketlist[con]='irc'
@@ -289,12 +288,16 @@ class Transport:
         self.disco.PlugIn(self.jabber)
         self.command = Commands(self.disco)
         self.command.PlugIn(self.jabber)
+        self.cmdonlineusers = Online_Users_Command(self)
+        self.cmdonlineusers.plugin(self.command)
         self.cmdactiveusers = Active_Users_Command(self)
         self.cmdactiveusers.plugin(self.command)
         self.cmdregisteredusers = Registered_Users_Command(self)
         self.cmdregisteredusers.plugin(self.command)
         self.cmdeditadminusers = Edit_Admin_List_Command(self, configfile, configfilename)
         self.cmdeditadminusers.plugin(self.command)
+        self.cmdrestartservice = Restart_Service_Command(self)
+        self.cmdrestartservice.plugin(self.command)
         self.cmdshutdownservice = Shutdown_Service_Command(self)
         self.cmdshutdownservice.plugin(self.command)
         self.disco.setDiscoHandler(self.xmpp_base_disco,node='',jid='')
@@ -303,6 +306,7 @@ class Transport:
     def xmpp_base_disco(self, con, event, type):
         fromjid = event.getFrom().__str__()
         to = event.getTo()
+        node = event.getQuerynode();
         room = irc_ulower(to.getNode())
         nick = to.getResource()
         try:
@@ -311,31 +315,83 @@ class Transport:
             channel=''
             server=room
         channel = JIDDecode(channel)
+        #Type is either 'info' or 'items'
         if to == hostname:
-            #Type is either 'info' or 'items'
-            if type == 'info':
-                return {'ids':[{'category':'conference','type':'irc','name':'IRC Transport'}],'features':[xmpp.NS_REGISTER,xmpp.NS_VERSION,NS_MUC,NS_COMMAND]}
-            if type == 'items':
-                fromjid = str(event.getFrom())
-                list = [{'node':NS_COMMANDS,'name':'IRC Transport Commands','jid':hostname}]
-                if self.users.has_key(fromjid):
-                    for each in self.users[fromjid].keys():
-                        list.append({'name':each,'jid':'%s@%s' % (each, hostname)})
-                return list
-        elif channel == '':
-            if type == 'info':
-                return {'ids':[{'category':'conference','type':'irc','name':server}],'features':[NS_MUC]}
-            if type == 'items':
-                rep=event.buildReply('result')
-                q=rep.getTag('query')
-                self.users[fromjid][server].pendingoperations["list"] = rep
-                self.users[fromjid][server].list()
+            if node == None:
+                if type == 'info':
+                    return {'ids':[{'category':'conference','type':'irc','name':'IRC Transport'}],'features':[NS_REGISTER,NS_VERSION,NS_MUC,NS_COMMANDS]}
+                if type == 'items':
+                    return [
+                        {'node':NS_COMMANDS,'name':'IRC Transport Commands','jid':hostname},
+                        {'node':NODE_REGISTERED_SERVERS,'name':'IRC Transport Registered Servers','jid':hostname},
+                        {'node':NODE_ONLINE_SERVERS,'name':'IRC Transport Online Servers','jid':hostname}]
+            elif node == NODE_REGISTERED_SERVERS:
+                if type == 'info':
+                    return {'ids':[],'features':[]}
+                if type == 'items':
+                    fromjid = str(event.getFrom())
+                    list = []
+                    #if self.users.has_key(fromjid):
+                    #    for each in self.users[fromjid].keys():
+                    #        list.append({'name':each,'jid':'%s@%s' % (each, hostname)})
+                    return list
+            elif node == NODE_ONLINE_SERVERS:
+                if type == 'info':
+                    return {'ids':[],'features':[]}
+                if type == 'items':
+                    fromjid = str(event.getFrom())
+                    list = []
+                    if self.users.has_key(fromjid):
+                        for each in self.users[fromjid].keys():
+                            list.append({'name':each,'jid':'%s@%s' % (each, hostname)})
+                    return list
+            else:
+                self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))
                 raise NodeProcessed
+        elif channel == '':
+            if self.users.has_key(fromjid):
+                if self.users[fromjid].has_key(server):
+                    if node == None:
+                        if type == 'info':
+                            return {'ids':[{'category':'conference','type':'irc','name':server}],'features':[NS_MUC]}
+                        if type == 'items':
+                            return [
+                                {'node':NODE_ONLINE_CHANNELS,'name':'IRC Transport Online Channels','jid':'%s@%s' % (server, hostname)},
+                                {'node':NODE_ACTIVE_CHANNELS,'name':'IRC Transport Active Channels','jid':'%s@%s' % (server, hostname)}]
+                    elif node == NODE_ONLINE_CHANNELS:
+                        if type == 'info':
+                            return {'ids':[],'features':[]}
+                        if type == 'items':
+                            rep=event.buildReply('result')
+                            q=rep.getTag('query')
+                            self.users[fromjid][server].pendingoperations["list"] = rep
+                            self.users[fromjid][server].list()
+                            raise NodeProcessed
+                    elif node == NODE_ACTIVE_CHANNELS:
+                        if type == 'info':
+                            return {'ids':[],'features':[]}
+                        if type == 'items':
+                            fromjid = str(event.getFrom())
+                            list = []
+                            if self.users.has_key(fromjid):
+                                if self.users[fromjid].has_key(server):
+                                    for each in self.users[fromjid][server].memberlist.keys():
+                                        list.append({'name':each,'jid':'%s%%%s@%s' % (JIDEncode(each), server, hostname)})
+                            return list
+                    else:
+                        self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))
+                        raise NodeProcessed
+            self.jabber.send(Error(event,ERR_REGISTRATION_REQUIRED))
+            raise NodeProcessed
         elif irclib.is_channel(channel):
-            if type == 'info':
-                return {'ids':[{'category':'conference','type':'irc','name':channel}],'features':[NS_MUC]}
-            if type == 'items':
-                return []
+            if self.users.has_key(fromjid):
+                if self.users[fromjid].has_key(server):
+                    if type == 'info':
+                        return {'ids':[{'category':'conference','type':'irc','name':channel}],'features':[NS_MUC]}
+                    if type == 'items':
+                        return []
+            self.jabber.send(Error(event,ERR_REGISTRATION_REQUIRED))
+            raise NodeProcessed
         else:
             self.jabber.send(Error(event,MALFORMED_JID))
             raise NodeProcessed
@@ -538,7 +594,7 @@ class Transport:
         fromjid = event.getFrom()
         to = event.getTo()
         id = event.getID()
-        m = Iq(to=fromjid,frm=to, typ='result', queryNS=NS_DISCO_INFO, payload=[Node('identity',attrs={'category':'conference','type':'irc','name':'IRC Transport'}),Node('feature', attrs={'var':xmpp.NS_REGISTER}),Node('feature',attrs={'var':NS_MUC})])
+        m = Iq(to=fromjid,frm=to, typ='result', queryNS=NS_DISCO_INFO, payload=[Node('identity',attrs={'category':'conference','type':'irc','name':'IRC Transport'}),Node('feature', attrs={'var':NS_REGISTER}),Node('feature',attrs={'var':NS_MUC})])
         m.setID(id)
         self.jabber.send(m)
         raise xmpp.NodeProcessed
@@ -566,7 +622,7 @@ class Transport:
             m.setTagAttr('query','name','xmpp IRC Transport')
             m.setTagAttr('query','type','irc')
             m.setTagAttr('query','jid','hostname')
-            m.setPayload([Node('ns',payload=NS_MUC),Node('ns',payload=xmpp.NS_REGISTER)])
+            m.setPayload([Node('ns',payload=NS_MUC),Node('ns',payload=NS_REGISTER)])
         self.jabber.send(m)
         raise xmpp.NodeProcessed
 
@@ -835,6 +891,7 @@ class Transport:
             self.jabber.send(m)
             reply = event.buildReply('result')
             self.jabber.send(reply)
+        userfile.sync()
        	raise xmpp.NodeProcessed
 
     #IRC methods
@@ -1351,6 +1408,7 @@ if __name__ == '__main__':
         sys.exit(1)
     socketlist[connection.Connection._sock]='xmpp'
     transport.online = 1
+    transport.restart = 0
     while transport.online:
         try:
             (i , o, e) = select.select(socketlist.keys(),[],[],1)
@@ -1394,3 +1452,11 @@ if __name__ == '__main__':
                         raise _pendingException[0], _pendingException[1], _pendingException[2]
                     traceback.print_exc()
     userfile.close()
+    connection.disconnect()
+    if transport.restart:
+        args=[sys.executable]+sys.argv
+        if os.name == 'nt':
+            def quote(a): return "\"%s\"" % a
+            args = map(quote, args)
+        print sys.executable, args
+        os.execv(sys.executable, args)
