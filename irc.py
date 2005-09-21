@@ -330,10 +330,14 @@ class Transport:
                     return {'ids':[],'features':[]}
                 if type == 'items':
                     fromjid = str(event.getFrom())
+                    fromstripped = event.getFrom().getStripped().encode('utf8')
                     list = []
-                    #if self.users.has_key(fromjid):
-                    #    for each in self.users[fromjid].keys():
-                    #        list.append({'name':each,'jid':'%s@%s' % (each, hostname)})
+                    servers = []
+                    if userfile.has_key(fromstripped):
+                        if userfile[fromstripped].has_key('servers'):
+                            servers = userfile[fromstripped][servers]
+                    for each in servers:
+                        list.append({'name':each,'jid':'%s@%s' % (each, hostname)})
                     return list
             elif node == NODE_ONLINE_SERVERS:
                 if type == 'info':
@@ -400,7 +404,7 @@ class Transport:
     def xmpp_presence(self, con, event):
         # Add ACL support
         fromjid = event.getFrom().__str__()
-        fromstripped = fromjid.encode('utf-8')
+        fromstripped = event.getFrom().getStripped().encode('utf8')
         type = event.getType()
         #if type == None: type = 'available'
         to = event.getTo()
@@ -448,34 +452,34 @@ class Transport:
                 self.jabber.send(Error(event,ERR_FEATURE_NOT_IMPLEMENTED))
         elif to == hostname:
             if type == 'subscribe':
-                if userfile.has_key(event.getFrom().getStripped().encode('utf8')):
+                if userfile.has_key(fromstripped):
                     self.jabber.send(Presence(to=fromjid, frm = to, typ = 'subscribed'))
-                    conf = userfile[event.getFrom().getStripped().encode('utf8')]
+                    conf = userfile[fromstripped]
                     conf['usubscribed']=True
-                    userfile[event.getFrom().getStripped().encode('utf8')]=conf
+                    userfile[fromstripped]=conf
                 else:
                     self.jabber.send(Error(event,ERR_BAD_REQUEST))
             elif type == 'subscribed':
-                if userfile.has_key(event.getFrom().getStripped().encode('utf8')):
-                    conf = userfile[event.getFrom().getStripped().encode('utf8')]
+                if userfile.has_key(fromstripped):
+                    conf = userfile[fromstripped]
                     conf['subscribed']=True
-                    userfile[event.getFrom().getStripped().encode('utf8')]=conf
+                    userfile[fromstripped]=conf
                 else:
                     self.jabber.send(Error(event,ERR_BAD_REQUEST))
             #
             #Add code so people can see transport presence here
             #
             elif type == 'probe':
-	    	self.jabber.send(Presence(to=fromjid, frm = to))
-                if not userfile.has_key(event.getFrom().getStripped().encode('utf8')):
+                self.jabber.send(Presence(to=fromjid, frm = to))
+                if not userfile.has_key(fromstripped):
                     self.jabber.send(Presence(to=fromjid, frm=to, typ = 'unsubscribe'))
                     self.jabber.send(Presence(to=fromjid, frm=to, typ = 'unsubscribed'))
             elif type == 'unavailable':
-	    	self.jabber.send(Presence(to=fromjid, frm = to, typ = 'unavailable'))
-	    elif type == 'error':
-	       return
-	    else:
-	    	self.jabber.send(Presence(to=fromjid, frm = to))
+                self.jabber.send(Presence(to=fromjid, frm = to, typ = 'unavailable'))
+            elif type == 'error':
+                return
+            else:
+                self.jabber.send(Presence(to=fromjid, frm = to))
         else:
             self.jabber.send(Error(event,MALFORMED_JID))
             return
@@ -587,7 +591,7 @@ class Transport:
         
         self.users[fromjid][server].pendingoperations["whois:" + irc_ulower(nick)] = m
         self.users[fromjid][server].whois([(nick + ' ' + nick).encode(self.users[fromjid][server].charset)])
-            
+        
         raise xmpp.NodeProcessed
 
     def xmpp_iq_discoinfo(self, con, event):
@@ -855,7 +859,8 @@ class Transport:
             remove = True
         elif query.getTag(name='x',namespace=NS_DATA):
             form = DataForm(node=query.getTag(name='x',namespace=NS_DATA))
-            ucharset = form.getField('charset').getValue()
+            if form.getField('charset'):
+                ucharset = form.getField('charset').getValue()
         elif query.getTag('charset'):
             ucharset = query.getTagData('charset')
         else:
@@ -892,7 +897,7 @@ class Transport:
             reply = event.buildReply('result')
             self.jabber.send(reply)
         userfile.sync()
-       	raise xmpp.NodeProcessed
+        raise xmpp.NodeProcessed
 
     #IRC methods
     def irc_doquit(self,con):
@@ -1189,7 +1194,7 @@ class Transport:
         nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
         jid = '%s%%%s@%s' % (nick, conn.server, hostname)
         if nick not in conn.memberlist[channel].keys():
-            conn.memberlist[channel][nick]={'affiliation':'none','role':'visitor','jid':jid}	
+            conn.memberlist[channel][nick]={'affiliation':'none','role':'visitor','jid':jid}
         m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, hostname, nick))
         t=m.addChild(name='x',namespace=NS_MUC_USER)
         p=t.addChild(name='item',attrs=conn.memberlist[channel][nick])
@@ -1226,7 +1231,7 @@ class Transport:
         except KeyError:
             pass
 
-    def irc_whoisgetvcard(self,conn,event):    	
+    def irc_whoisgetvcard(self,conn,event):
         nick = irc_ulower(unicode(event.arguments()[0],conn.charset,'replace'))
         m = conn.pendingoperations["whois:" + nick]
         return m.getTag('vcard', namespace=NS_VCARD)
