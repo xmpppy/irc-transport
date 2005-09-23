@@ -311,15 +311,19 @@ class Transport:
         nick = to.getResource()
         try:
             channel, server = room.split('%')
+            channel = JIDDecode(channel)
         except ValueError:
             channel=''
             server=room
-        channel = JIDDecode(channel)
         #Type is either 'info' or 'items'
         if to == hostname:
             if node == None:
                 if type == 'info':
-                    return {'ids':[{'category':'conference','type':'irc','name':'IRC Transport'}],'features':[NS_REGISTER,NS_VERSION,NS_MUC,NS_COMMANDS]}
+                    return {
+                        'ids':[
+                            {'category':'conference','type':'irc','name':'IRC Transport'},
+                            {'category':'gateway','type':'irc','name':'IRC Transport'}],
+                        'features':[NS_REGISTER,NS_VERSION,NS_MUC,NS_COMMANDS]}
                 if type == 'items':
                     return [
                         {'node':NS_COMMANDS,'name':'IRC Transport Commands','jid':hostname},
@@ -335,7 +339,7 @@ class Transport:
                     servers = []
                     if userfile.has_key(fromstripped):
                         if userfile[fromstripped].has_key('servers'):
-                            servers = userfile[fromstripped][servers]
+                            servers = userfile[fromstripped]['servers']
                     for each in servers:
                         list.append({'name':each,'jid':'%s@%s' % (each, hostname)})
                     return list
@@ -504,6 +508,7 @@ class Transport:
             pass
         try:
             channel, server = room.split('%')
+            channel = JIDDecode(channel)
         except ValueError:
             self.jabber.send(Error(event,MALFORMED_JID))
             return
@@ -565,18 +570,16 @@ class Transport:
         # need to store this ID somewhere for the return trip
         try:
             channel, server = room.split('%')
+            channel = JIDDecode(channel)
         except ValueError:
             self.jabber.send(Error(event,MALFORMED_JID))
             raise xmpp.NodeProcessed
-            return
         if not self.users.has_key(fromjid):
             self.jabber.send(Error(event,ERR_REGISTRATION_REQUIRED))         # another candidate: ERR_SUBSCRIPTION_REQUIRED
             raise xmpp.NodeProcessed
-            return
         if not self.users[fromjid].has_key(server):
             self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))        # Another candidate: ERR_REMOTE_SERVER_NOT_FOUND (but it means that server doesn't exist at all)
             raise xmpp.NodeProcessed
-            return
         nick = None
         if not irclib.is_channel(channel):
             # ARGH! need to know channel to find out nick. :(
@@ -647,6 +650,7 @@ class Transport:
         id = event.getID()
         try:
             channel, server = room.split('%')
+            channel = JIDDecode(channel)
         except ValueError:
             self.jabber.send(Error(event,MALFORMED_JID))
             raise xmpp.NodeProcessed
@@ -690,6 +694,7 @@ class Transport:
         id = event.getID()
         try:
             channel, server = room.split('%')
+            channel = JIDDecode(channel)
         except ValueError:
             self.jabber.send(Error(event,MALFORMED_JID))
             raise xmpp.NodeProcessed
@@ -737,6 +742,7 @@ class Transport:
         id = event.getID()
         try:
             channel, server = room.split('%')
+            channel = JIDDecode(channel)
         except ValueError:
             self.jabber.send(Error(event,MALFORMED_JID))
             raise xmpp.NodeProcessed
@@ -763,6 +769,7 @@ class Transport:
         id = event.getID()
         try:
             channel, server = room.split('%')
+            channel = JIDDecode(channel)
         except ValueError:
             self.jabber.send(Error(event,MALFORMED_JID))
             raise xmpp.NodeProcessed
@@ -1234,7 +1241,7 @@ class Transport:
     def irc_whoisgetvcard(self,conn,event):
         nick = irc_ulower(unicode(event.arguments()[0],conn.charset,'replace'))
         m = conn.pendingoperations["whois:" + nick]
-        return m.getTag('vcard', namespace=NS_VCARD)
+        return m.getTag('vCard', namespace=NS_VCARD)
         
     def irc_whoisuser(self,conn,event):
         p = self.irc_whoisgetvcard(conn,event)
