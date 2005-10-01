@@ -305,6 +305,7 @@ class Transport:
     # New Disco Handlers
     def xmpp_base_disco(self, con, event, type):
         fromjid = event.getFrom().__str__()
+        fromstripped = event.getFrom().getStripped().encode('utf8')
         to = event.getTo()
         node = event.getQuerynode();
         room = irc_ulower(to.getNode())
@@ -333,8 +334,6 @@ class Transport:
                 if type == 'info':
                     return {'ids':[],'features':[]}
                 if type == 'items':
-                    fromjid = str(event.getFrom())
-                    fromstripped = event.getFrom().getStripped().encode('utf8')
                     list = []
                     servers = []
                     if userfile.has_key(fromstripped):
@@ -347,7 +346,6 @@ class Transport:
                 if type == 'info':
                     return {'ids':[],'features':[]}
                 if type == 'items':
-                    fromjid = str(event.getFrom())
                     list = []
                     if self.users.has_key(fromjid):
                         for each in self.users[fromjid].keys():
@@ -379,7 +377,6 @@ class Transport:
                         if type == 'info':
                             return {'ids':[],'features':[]}
                         if type == 'items':
-                            fromjid = str(event.getFrom())
                             list = []
                             if self.users.has_key(fromjid):
                                 if self.users[fromjid].has_key(server):
@@ -968,7 +965,7 @@ class Transport:
            conn.join(channel)
            conn.who(channel)
         except:
-           self.irc_doquit(connection)
+           self.irc_doquit(conn)
         conn.memberlist[channel] = {}
         conn.chanmode[channel] = {'private':False, 'secret':False, 'invite':False, 'topic':False, 'notmember':False, 'moderated':False, 'banlist':[], 'limit':False, 'key':''}
 
@@ -976,7 +973,7 @@ class Transport:
         try:
            conn.part([channel.encode(conn.charset)])
         except:
-            self.irc_doquit(connection)
+            self.irc_doquit(conn)
 
     # IRC message handlers
     def irc_error(self,conn,event):
@@ -1060,7 +1057,7 @@ class Transport:
         try:
            conn.part(event.arguments()[1])
         except:
-           self.irc_doquit(connection)
+           self.irc_doquit(conn)
 
     def irc_mode(self,conn,event):
     # Mode handling currently is very poor.
