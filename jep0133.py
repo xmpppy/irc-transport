@@ -34,11 +34,18 @@ class Online_Users_Command(xmpp.commands.Command_Handler_Prototype):
     description = 'Get List of Online Users'
     discofeatures = [xmpp.commands.NS_COMMANDS,xmpp.NS_DATA]
     
-    def __init__(self,transport):
+    def __init__(self,transport,jid=''):
         """Initialise the command object"""
-        xmpp.commands.Command_Handler_Prototype.__init__(self)
+        xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
         self.initial = { 'execute':self.cmdFirstStage }
         self.transport = transport
+        
+    def _DiscoHandler(self,conn,request,type):
+        """The handler for discovery events"""
+        if request.getFrom().getStripped() in administrators:
+            return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,request,type)
+        else:
+            return None
         
     def cmdFirstStage(self,conn,request):
         """Build the reply to complete the request"""
@@ -58,11 +65,18 @@ class Active_Users_Command(xmpp.commands.Command_Handler_Prototype):
     description = 'Get List of Active Users'
     discofeatures = [xmpp.commands.NS_COMMANDS,xmpp.NS_DATA]
     
-    def __init__(self,transport):
+    def __init__(self,transport,jid=''):
         """Initialise the command object"""
-        xmpp.commands.Command_Handler_Prototype.__init__(self)
+        xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
         self.initial = { 'execute':self.cmdFirstStage }
         self.transport = transport
+        
+    def _DiscoHandler(self,conn,request,type):
+        """The handler for discovery events"""
+        if request.getFrom().getStripped() in administrators:
+            return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,request,type)
+        else:
+            return None
         
     def cmdFirstStage(self,conn,request):
         """Build the reply to complete the request"""
@@ -82,11 +96,18 @@ class Registered_Users_Command(xmpp.commands.Command_Handler_Prototype):
     description = 'Get List of Registered Users'
     discofeatures = [xmpp.commands.NS_COMMANDS,xmpp.NS_DATA]
     
-    def __init__(self,transport):
+    def __init__(self,transport,jid=''):
         """Initialise the command object"""
-        xmpp.commands.Command_Handler_Prototype.__init__(self)
+        xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
         self.initial = { 'execute':self.cmdFirstStage }
         self.transport = transport
+        
+    def _DiscoHandler(self,conn,request,type):
+        """The handler for discovery events"""
+        if request.getFrom().getStripped() in administrators:
+            return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,request,type)
+        else:
+            return None
         
     def cmdFirstStage(self,conn,request):
         """Build the reply to complete the request"""
@@ -107,13 +128,20 @@ class Edit_Admin_List_Command(xmpp.commands.Command_Handler_Prototype):
     description = 'Edit Admin List'
     discofeatures = [xmpp.commands.NS_COMMANDS, xmpp.NS_DATA]
     
-    def __init__(self,transport,configfile,configfilename):
+    def __init__(self,transport,configfile,configfilename,jid=''):
         """Initialise the command object"""
-        xmpp.commands.Command_Handler_Prototype.__init__(self)
+        xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
         self.initial = {'execute':self.cmdFirstStage }
         self.transport = transport
         self.configfile = configfile
         self.configfilename = configfilename
+        
+    def _DiscoHandler(self,conn,request,type):
+        """The handler for discovery events"""
+        if request.getFrom().getStripped() in administrators:
+            return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,request,type)
+        else:
+            return None
         
     def cmdFirstStage(self,conn,request):
         """Set the session ID, and return the form containing the current administrators"""
@@ -171,11 +199,18 @@ class Restart_Service_Command(xmpp.commands.Command_Handler_Prototype):
     description = 'Restart Service'
     discofeatures = [xmpp.commands.NS_COMMANDS, xmpp.NS_DATA]
     
-    def __init__(self,transport):
+    def __init__(self,transport,jid=''):
         """Initialise the command object"""
-        xmpp.commands.Command_Handler_Prototype.__init__(self)
+        xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
         self.initial = {'execute':self.cmdFirstStage }
         self.transport = transport
+        
+    def _DiscoHandler(self,conn,request,type):
+        """The handler for discovery events"""
+        if request.getFrom().getStripped() in administrators:
+            return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,request,type)
+        else:
+            return None
         
     def cmdFirstStage(self,conn,request):
         """Set the session ID, and return the form containing the current administrators"""
@@ -227,11 +262,18 @@ class Shutdown_Service_Command(xmpp.commands.Command_Handler_Prototype):
     description = 'Shut Down Service'
     discofeatures = [xmpp.commands.NS_COMMANDS, xmpp.NS_DATA]
     
-    def __init__(self,transport):
+    def __init__(self,transport,jid=''):
         """Initialise the command object"""
-        xmpp.commands.Command_Handler_Prototype.__init__(self)
+        xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
         self.initial = {'execute':self.cmdFirstStage }
         self.transport = transport
+        
+    def _DiscoHandler(self,conn,request,type):
+        """The handler for discovery events"""
+        if request.getFrom().getStripped() in administrators:
+            return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,request,type)
+        else:
+            return None
         
     def cmdFirstStage(self,conn,request):
         """Set the session ID, and return the form containing the current administrators"""
