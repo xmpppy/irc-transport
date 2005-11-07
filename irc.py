@@ -1798,11 +1798,13 @@ if __name__ == '__main__':
                     transport.xmpp_disconnect()
                 except:
                     if logfile != None:
+                        logfile.write(time.strftime('%a %d %b %Y %H:%M:%S\n'))
                         traceback.print_exc(file=logfile)
                         logfile.flush()
                     if fatalerrors:
                         _pendingException = sys.exc_info()
                         raise _pendingException[0], _pendingException[1], _pendingException[2]
+                    print(time.strftime('%a %d %b %Y %H:%M:%S'))
                     traceback.print_exc()
                 if not connection.isConnected():  transport.xmpp_disconnect()
             else:
@@ -1810,11 +1812,13 @@ if __name__ == '__main__':
                     ircobj.process_data([each])
                 except:
                     if logfile != None:
+                        logfile.write(time.strftime('%a %d %b %Y %H:%M:%S\n'))
                         traceback.print_exc(file=logfile)
                         logfile.flush()
                     if fatalerrors:
                         _pendingException = sys.exc_info()
                         raise _pendingException[0], _pendingException[1], _pendingException[2]
+                    print(time.strftime('%a %d %b %Y %H:%M:%S'))
                     traceback.print_exc()
     userfile.close()
     connection.disconnect()
