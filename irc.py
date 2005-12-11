@@ -207,20 +207,13 @@ def irc_ulower(str):
 
 def connectxmpp(handlerreg = None):
     connected = connection.connect((server,port))
-    print connected
+    #print repr(connected)
     if connected == 'tcp':
         if handlerreg != None:
             handlerreg()
-        print "try auth"
+        #print "try auth"
         connected = connection.auth(hostname,secret)
-        print "auth return",connected
-        return connected
-    while 1:
-        time.sleep(5)
-        xmpp.transports.TCPsocket((server,port)).PlugOut()
-        connected=connection.reconnectAndReauth()
-        if connected: break
-    connection.UnregisterDisconnectHandler(connection.DisconnectHandler)
+        #print "auth return",connected
     return connected
 
 class Connect_Server_Command(xmpp.commands.Command_Handler_Prototype):
@@ -1712,9 +1705,11 @@ class Transport:
             for item in self.users[each].keys():
                 self.irc_doquit(self.users[each][item])
             del self.users[each]
-        #del connection
+        del socketlist[connection.Connection._sock]
+        time.sleep(5)
         while not connection.reconnectAndReauth():
             time.sleep(5)
+        socketlist[connection.Connection._sock]='xmpp'
 
 import pdb
 if __name__ == '__main__':
@@ -1769,7 +1764,7 @@ if __name__ == '__main__':
     transport = Transport(connection,ircobj)
     transport.userfile = userfile
     if not connectxmpp(transport.register_handlers):
-        print "Password mismatch!"
+        print "Could not connect to server, or password mismatch!"
         sys.exit(1)
     socketlist[connection.Connection._sock]='xmpp'
     transport.online = 1
@@ -1804,7 +1799,7 @@ if __name__ == '__main__':
                     if fatalerrors:
                         _pendingException = sys.exc_info()
                         raise _pendingException[0], _pendingException[1], _pendingException[2]
-                    print(time.strftime('%a %d %b %Y %H:%M:%S'))
+                    sys.stderr.write(time.strftime('%a %d %b %Y %H:%M:%S\n'))
                     traceback.print_exc()
                 if not connection.isConnected():  transport.xmpp_disconnect()
             else:
@@ -1818,7 +1813,7 @@ if __name__ == '__main__':
                     if fatalerrors:
                         _pendingException = sys.exc_info()
                         raise _pendingException[0], _pendingException[1], _pendingException[2]
-                    print(time.strftime('%a %d %b %Y %H:%M:%S'))
+                    sys.stderr.write(time.strftime('%a %d %b %Y %H:%M:%S\n'))
                     traceback.print_exc()
     userfile.close()
     connection.disconnect()
