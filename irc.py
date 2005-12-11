@@ -550,29 +550,28 @@ class Transport:
                     conf = userfile[fromstripped]
                 elif server and userfile[fromstripped].has_key('servers') and userfile[fromstripped]['servers'].has_key(server):
                     conf = userfile[fromstripped]['servers'][server]
+            if not conf:
+                self.jabber.send(Presence(to=fromjid, frm=to, typ = 'unsubscribe'))
+                self.jabber.send(Presence(to=fromjid, frm=to, typ = 'unsubscribed'))
+                self.jabber.send(Error(event,ERR_BAD_REQUEST))
+                return
             if type == 'subscribe':
-                if conf:
-                    self.jabber.send(Presence(to=fromjid, frm = to, typ = 'subscribed'))
-                    conf['usubscribed']=True
-                else:
-                    self.jabber.send(Presence(to=fromjid, frm=to, typ = 'unsubscribe'))
-                    self.jabber.send(Presence(to=fromjid, frm=to, typ = 'unsubscribed'))
-                    self.jabber.send(Error(event,ERR_BAD_REQUEST))
+                self.jabber.send(Presence(to=fromjid, frm = to, typ = 'subscribe'))
+                conf['usubscribed']=True
             elif type == 'subscribed':
-                if conf:
-                    conf['subscribed']=True
-                else:
-                    self.jabber.send(Presence(to=fromjid, frm=to, typ = 'unsubscribe'))
-                    self.jabber.send(Presence(to=fromjid, frm=to, typ = 'unsubscribed'))
-                    self.jabber.send(Error(event,ERR_BAD_REQUEST))
+                self.jabber.send(Presence(to=fromjid, frm = to, typ = 'subscribed'))
+                conf['subscribed']=True
+            elif type == 'unsubscribe':
+                self.jabber.send(Presence(to=fromjid, frm = to, typ = 'unsubscribe'))
+                conf['usubscribed']=False
+            elif type == 'unsubscribed':
+                self.jabber.send(Presence(to=fromjid, frm = to, typ = 'unsubscribed'))
+                conf['subscribed']=False
             #
             #Add code so people can see transport presence here
             #
             elif type == 'probe':
                 self.jabber.send(Presence(to=fromjid, frm = to))
-                if not conf:
-                    self.jabber.send(Presence(to=fromjid, frm=to, typ = 'unsubscribe'))
-                    self.jabber.send(Presence(to=fromjid, frm=to, typ = 'unsubscribed'))
             elif type == 'unavailable':
                 #call self.irc_disconnect to disconnect from the server
                 #when you see the user's presence become unavailable
