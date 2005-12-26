@@ -1215,12 +1215,14 @@ class Transport:
 
         address = server
         username = realname = nick
+        ucharset = charset
         if userfile.has_key(fromstripped):
-            charset = userfile[fromstripped]['charset']
+            ucharset = userfile[fromstripped]['charset']
             if userfile[fromstripped].has_key('servers'):
                 servers = userfile[fromstripped]['servers']
                 if servers.has_key(server):
                     serverdetails = servers[server]
+                    ucharset = serverdetails['charset']
                     if serverdetails['address']:
                         address = serverdetails['address']
                     if not nick:
@@ -1252,15 +1254,7 @@ class Transport:
             c.memberlist = {}
             c.chanmode = {}
             c.pendingoperations = {}
-            if userfile.has_key(fromstripped):
-                c.charset = userfile[fromstripped]['charset']
-                if userfile[fromstripped].has_key('servers'):
-                    servers = userfile[fromstripped]['servers']
-                    if servers.has_key(server):
-                        serverdetails = servers[server]
-                        c.charset = serverdetails['charset']
-            else:
-                c.charset = charset
+            c.charset = ucharset
             self.jabber.send(Presence(to=fromjid, frm = '%s@%s' % (server, hostname)))
             return c
         except irclib.ServerConnectionError:
