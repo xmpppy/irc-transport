@@ -212,7 +212,7 @@ def connectxmpp(handlerreg = None):
         if handlerreg != None:
             handlerreg()
         #print "try auth"
-        connected = connection.auth(hostname,secret)
+        connected = connection.auth(serveruser,secret)
         #print "auth return",connected
     return connected
 
@@ -1723,6 +1723,12 @@ if __name__ == '__main__':
     configfile.readfp(cffile)
     cffile.close()
     server = configfile.get('transport','Server')
+    if configfile.has_option('transport','ServerUser'):
+        serveruser = configfile.get('transport','ServerUser')
+        component = 1
+    else:
+        serveruser = server
+        component = 0
     hostname = configfile.get('transport','Hostname')
     port = int(configfile.get('transport','Port'))
     secret = configfile.get('transport','Secret')
@@ -1753,7 +1759,7 @@ if __name__ == '__main__':
         fatalerrors = configfile.get('transport','FatalErrors').lower() in ['true', '1', 'yes']
 
     ircobj = irclib.IRC(fn_to_add_socket=irc_add_conn,fn_to_remove_socket=irc_del_conn)
-    connection = xmpp.client.Component(hostname,port)
+    connection = xmpp.client.Component(hostname,port,component=component)
     transport = Transport(connection,ircobj)
     transport.userfile = userfile
     if not connectxmpp(transport.register_handlers):
