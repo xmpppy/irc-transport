@@ -4,6 +4,7 @@ version = 'CVS ' + '$Revision$'.split()[1]
 #
 # xmpp->IRC transport
 # Jan 2004 Copyright (c) Mike Albon
+# 2006 Copyright (c) Norman Rasmussen
 #
 # This program is free software licensed with the GNU Public License Version 2.
 # For a full copy of the license please go here http://www.gnu.org/licenses/licenses.html#GPL
