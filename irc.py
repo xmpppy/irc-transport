@@ -28,6 +28,7 @@ from jep0106 import *
 import traceback
 
 #Global definitions
+VERSTR = 'IRC Transport'
 True = 1
 False = 0
 server = None
@@ -462,14 +463,14 @@ class Transport:
                 if type == 'info':
                     return {
                         'ids':[
-                            {'category':'conference','type':'irc','name':'IRC Transport'},
-                            {'category':'gateway','type':'irc','name':'IRC Transport'}],
+                            {'category':'conference','type':'irc','name':VERSTR},
+                            {'category':'gateway','type':'irc','name':VERSTR}],
                         'features':[NS_REGISTER,NS_VERSION,NS_MUC,NS_COMMANDS]}
                 if type == 'items':
                     return [
-                        {'node':NS_COMMANDS,'name':'IRC Transport Commands','jid':hostname},
-                        {'node':NODE_REGISTERED_SERVERS,'name':'IRC Transport Registered Servers','jid':hostname},
-                        {'node':NODE_ONLINE_SERVERS,'name':'IRC Transport Online Servers','jid':hostname}]
+                        {'node':NS_COMMANDS,'name':VERSTR + ' Commands','jid':hostname},
+                        {'node':NODE_REGISTERED_SERVERS,'name':VERSTR + ' Registered Servers','jid':hostname},
+                        {'node':NODE_ONLINE_SERVERS,'name':VERSTR + ' Online Servers','jid':hostname}]
             elif node == NODE_REGISTERED_SERVERS:
                 if type == 'info':
                     return {'ids':[],'features':[]}
@@ -863,7 +864,7 @@ class Transport:
 
 
     def xmpp_iq_agents(self, con, event):
-        m = Iq(to=event.getFrom(), frm=event.getTo(), typ='result', payload=[Node('agent', attrs={'jid':hostname},payload=[Node('service',payload='irc'),Node('name',payload='xmpp IRC Transport'),Node('groupchat')])])
+        m = Iq(to=event.getFrom(), frm=event.getTo(), typ='result', payload=[Node('agent', attrs={'jid':hostname},payload=[Node('service',payload='irc'),Node('name',payload=VERSTR),Node('groupchat')])])
         m.setID(event.getID())
         self.jabber.send(m)
         raise xmpp.NodeProcessed
@@ -872,7 +873,7 @@ class Transport:
         m = event.buildReply('result')
         if event.getTo() == hostname:
             m.setTagAttr('query','catagory','conference')
-            m.setTagAttr('query','name','xmpp IRC Transport')
+            m.setTagAttr('query','name',VERSTR)
             m.setTagAttr('query','type','irc')
             m.setTagAttr('query','jid','hostname')
             m.setPayload([Node('ns',payload=NS_MUC),Node('ns',payload=NS_REGISTER)])
@@ -885,7 +886,7 @@ class Transport:
         to = event.getTo()
         id = event.getID()
         uname = platform.uname()
-        m = Iq(to = fromjid, frm = to, typ = 'result', queryNS=NS_VERSION, payload=[Node('name',payload='xmpp IRC Transport'), Node('version',payload=version),Node('os',payload=('%s %s %s' % (uname[0],uname[2],uname[4])).strip())])
+        m = Iq(to = fromjid, frm = to, typ = 'result', queryNS=NS_VERSION, payload=[Node('name',payload=VERSTR), Node('version',payload=version),Node('os',payload=('%s %s %s' % (uname[0],uname[2],uname[4])).strip())])
         m.setID(id)
         self.jabber.send(m)
         raise xmpp.NodeProcessed
@@ -2062,7 +2063,7 @@ class Transport:
         if event.arguments()[0] == 'ACTION':
             self.irc_privmsg(conn,event,'/me '+event.arguments()[1])
         elif event.arguments()[0] == 'VERSION':
-            conn.ctcp_reply(irclib.nm_to_n(event.source()).encode(conn.charset),'VERSION xmpp IRC Transport ' + version)
+            conn.ctcp_reply(irclib.nm_to_n(event.source()).encode(conn.charset),'VERSION ' + VERSTR + version)
         elif event.arguments()[0] == 'CAPABILITIES':
             conn.ctcp_reply(irclib.nm_to_n(event.source()).encode(conn.charset),'CAPABILITIES version,x:event')
         elif event.arguments()[0] == 'X:EVENT':
