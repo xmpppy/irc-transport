@@ -24,8 +24,7 @@ from xmpp.commands import *
 from jep0133 import *
 import xmpp.commands
 import jep0133
-import jep0106
-from jep0106 import *
+from xmpp.jep0106 import *
 import traceback
 
 #Global definitions
