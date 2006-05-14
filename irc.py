@@ -845,25 +845,6 @@ class Transport:
         
         raise xmpp.NodeProcessed
 
-    def xmpp_iq_discoinfo(self, con, event):
-        fromjid = event.getFrom()
-        to = event.getTo()
-        id = event.getID()
-        m = Iq(to=fromjid,frm=to, typ='result', queryNS=NS_DISCO_INFO, payload=[Node('identity',attrs={'category':'conference','type':'irc','name':'IRC Transport'}),Node('feature', attrs={'var':NS_REGISTER}),Node('feature',attrs={'var':NS_MUC})])
-        m.setID(id)
-        self.jabber.send(m)
-        raise xmpp.NodeProcessed
-
-    def xmpp_iq_discoitems(self, con, event):
-        fromjid = event.getFrom()
-        to = event.getTo()
-        id = event.getID()
-        m = Iq(to=fromjid,frm=to, typ='result', queryNS=NS_DISCO_ITEMS)
-        m.setID(id)
-        self.jabber.send(m)
-        raise xmpp.NodeProcessed
-
-
     def xmpp_iq_agents(self, con, event):
         m = Iq(to=event.getFrom(), frm=event.getTo(), typ='result', payload=[Node('agent', attrs={'jid':hostname},payload=[Node('service',payload='irc'),Node('name',payload=VERSTR),Node('groupchat')])])
         m.setID(event.getID())
