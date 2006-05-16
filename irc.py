@@ -651,7 +651,7 @@ class Transport:
         else:
             nick = channel
             conf = None
-            if server and userfile[fromstripped].has_key('servers') and userfile[fromstripped]['servers'].has_key(server):
+            if server and userfile.has_key(fromstripped) and userfile[fromstripped].has_key('servers') and userfile[fromstripped]['servers'].has_key(server):
                 conf = userfile[fromstripped]['servers'][server]
             if not conf:
                 self.jabber.send(Presence(to=fromjid, frm=to, typ = 'unsubscribe'))
