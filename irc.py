@@ -1978,7 +1978,7 @@ class Transport:
                 resources = conn.xresources
             
             if resources != {}:
-                return chat[0],'%s/%s'%(conn.fromjid,find_highest_resource(resources)),chat[3]
+                return chat[0],'%s/%s'%(conn.fromjid,self.find_highest_resource(resources)),chat[3]
             else:
                 return chat[0],conn.fromjid,chat[3]
         try:
@@ -2064,7 +2064,8 @@ class Transport:
         nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
         if event.arguments()[0] == 'CAPABILITIES':
             if conn.activechats.has_key(irc_ulower(nick)):
-                conn.activechats[irc_ulower(nick)][3] = event.arguments()[1].split(',')
+                caps = event.arguments()[1].split(',')
+                conn.activechats[irc_ulower(nick)][3] = caps
         elif event.arguments()[0] == 'VERSION':
             # TODO: real version reply back to the xmpp world?
             pass
