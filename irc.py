@@ -325,6 +325,63 @@ class Disconnect_Server_Command(xmpp.commands.Command_Handler_Prototype):
             self._owner.send(Error(event,ERR_ITEM_NOT_FOUND))
             raise NodeProcessed
 
+class Message_Of_The_Day(xmpp.commands.Command_Handler_Prototype):
+    """This is the message of the day server command"""
+    name = 'motd'
+    description = 'Retrieve Message of the Day'
+    discofeatures = [xmpp.commands.NS_COMMANDS]
+    
+    def __init__(self,transport,jid=''):
+        """Initialise the command object"""
+        xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
+        self.initial = { 'execute':self.cmdFirstStage }
+        self.transport = transport
+        
+    def _DiscoHandler(self,conn,event,type):
+        """The handler for discovery events"""
+        fromjid = event.getFrom().getStripped().__str__()
+        to = event.getTo()
+        room = irc_ulower(to.getNode())
+        try:
+            channel, server = room.split('%',1)
+            channel = JIDDecode(channel)
+        except ValueError:
+            channel=''
+            server=room
+        if channel == '' and self.transport.users.has_key(fromjid) and self.transport.users[fromjid].has_key(server):
+            return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,event,type)
+        else:
+            return None
+        
+    def cmdFirstStage(self,conn,event):
+        """Build the reply to complete the request"""
+        fromjid = event.getFrom().getStripped().__str__()
+        to = event.getTo()
+        room = irc_ulower(to.getNode())
+        try:
+            channel, server = room.split('%',1)
+            channel = JIDDecode(channel)
+        except ValueError:
+            channel=''
+            server=room
+        if channel == '':
+            if self.transport.users.has_key(fromjid) \
+              and self.transport.users[fromjid].has_key(server):
+                # TODO: MOTD must become pending event, so it can go back to the right resource
+                self.transport.users[fromjid][server].motdhash = ''
+                self.transport.users[fromjid][server].motd()
+                reply = event.buildReply('result')
+                form = DataForm(typ='result',data=[DataField(value='Command completed.',typ='fixed')])
+                reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':event.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
+                self._owner.send(reply)
+                raise NodeProcessed
+            else:
+                self._owner.send(Error(event,ERR_ITEM_NOT_FOUND))
+                raise NodeProcessed
+        else:
+            self._owner.send(Error(event,ERR_ITEM_NOT_FOUND))
+            raise NodeProcessed
+
 class Transport:
     # This class is the main collection of where all the handlers for both the IRC and Jabber
 
@@ -441,6 +498,8 @@ class Transport:
         self.cmdconnectserver.plugin(self.command)
         self.cmddisconnectserver = Disconnect_Server_Command(self,jid='')
         self.cmddisconnectserver.plugin(self.command)
+        self.cmdmessageoftheday = Message_Of_The_Day(self,jid='')
+        self.cmdmessageoftheday.plugin(self.command)
         self.disco.setDiscoHandler(self.xmpp_base_disco,node='',jid=hostname)
         self.disco.setDiscoHandler(self.xmpp_base_disco,node='',jid='')
 
@@ -804,7 +863,8 @@ class Transport:
                     conn.activechats[irc_ulower(nick)] = [to,event.getFrom(),time.time(),conn.activechats[irc_ulower(nick)][3]]
                 else:
                     conn.activechats[irc_ulower(nick)] = [to,event.getFrom(),time.time(),{}]
-                    self.irc_sendctcp('CAPABILITIES',conn,nick,'')
+                    if len(room.split('%',1)) > 1:
+                        self.irc_sendctcp('CAPABILITIES',conn,nick,'')
                 if event.getBody()[0:3] == '/me':
                     self.irc_sendctcp('ACTION',conn,nick,event.getBody()[4:])
                 else:
@@ -1459,7 +1519,8 @@ class Transport:
             conn.activechats = {}
             conn.away = ''
             conn.charset = ucharset
-            self.jabber.send(Presence(to=frm, frm = '%s@%s' % (server, hostname)))
+            conn.connectstatus = 'Connecting: '
+            self.jabber.send(Presence(to=frm, frm = '%s@%s' % (server, hostname), status='Connecting...'))
             return conn
         except irclib.ServerConnectionError:
             self.jabber.send(Error(Presence(to = frm, frm = '%s%%%s@%s/%s' % (channel,server,hostname,nick)),ERR_SERVICE_UNAVAILABLE,reply=0))  # Other candidates: ERR_GONE, ERR_REMOTE_SERVER_NOT_FOUND, ERR_REMOTE_SERVER_TIMEOUT
@@ -1632,6 +1693,8 @@ class Transport:
         self.jabber.send(Presence(to=conn.fromjid, frm = '%s@%s' %(name, hostname), typ = 'unavailable'))
 
     def irc_welcome(self,conn,event):
+        conn.connectstatus = None
+        self.jabber.send(Presence(to = conn.fromjid, frm = '%s@%s' %(conn.server,hostname)))
         if conn.joinchan != '':
             self.irc_newroom(conn,conn.joinchan,conn.joinresource)
         #TODO: channel join operations should become pending operations
@@ -1940,14 +2003,21 @@ class Transport:
         except:
             nick = conn.server
         line,xhtml = colourparse(event.arguments()[0],conn.charset)
-        #TODO: resource handling? conn.joinresource?
-        m = Message(to=conn.fromjid,body= line,typ='chat',frm='%s@%s/%s' %(conn.server, hostname,nick),payload = [xhtml])
+        if line[-3:] == ' - ': line = line[:-3]
+        if line[:2] == '- ': line = line[2:]
+        #TODO: resource handling? conn.joinresource? what about adhoc?
+        m = Message(to=conn.fromjid,subject=line,typ='headline',frm='%s@%s/%s' %(conn.server, hostname,nick))
         conn.pendingoperations["motd"] = m
 
     def irc_motd(self,conn,event):
         line,xhtml = colourparse(event.arguments()[0],conn.charset)
+        if line[:2] == '- ': line = line[2:]
         m = conn.pendingoperations["motd"]
-        m.setBody(m.getBody() + '\x0a' + line)
+        if m.getBody():
+            body = m.getBody() + '\x0a'
+        else:
+            body = ''
+        m.setBody(body + line)
 
     def irc_endofmotd(self,conn,event):
         m = conn.pendingoperations["motd"]
@@ -2019,7 +2089,12 @@ class Transport:
             type = 'chat'
             line,xhtml = colourparse(msg,conn.charset)
             frm,to,caps = self.nm_to_jidinfo(conn,event.source())
-            m = Message(to=to,body=line,typ=type,frm=frm,payload = [xhtml])
+            # if we're still connecting then send server messages as presence information
+            if conn.connectstatus != None and frm.find('/') > -1:
+                if line[:4] == '*** ': line = line[4:]
+                m = Presence(to=to,frm='%s@%s'%(conn.server,hostname), status=conn.connectstatus + line)
+            else:
+                m = Message(to=to,body=line,typ=type,frm=frm,payload = [xhtml])
             if 'x:event' in caps:
                 m.setTag('x',namespace=NS_EVENT).setTag('composing')
             self.jabber.send(m)
@@ -2056,16 +2131,18 @@ class Transport:
             frm,to,caps = self.nm_to_jidinfo(conn,event.source())
             m = Message(to=to,frm=frm)
             xevent = m.setTag('x',namespace=NS_EVENT)
-            for each in event.arguments()[1].split(','):
-                xevent.setTag(each)
+            if len(event.arguments()) > 1:
+                for each in event.arguments()[1].split(','):
+                    xevent.setTag(each)
             self.jabber.send(m)
 
     def irc_ctcpreply(self,conn,event):
         nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
         if event.arguments()[0] == 'CAPABILITIES':
             if conn.activechats.has_key(irc_ulower(nick)):
-                caps = event.arguments()[1].split(',')
-                conn.activechats[irc_ulower(nick)][3] = caps
+                if len(event.arguments()) > 1:
+                    caps = event.arguments()[1].split(',')
+                    conn.activechats[irc_ulower(nick)][3] = caps
         elif event.arguments()[0] == 'VERSION':
             # TODO: real version reply back to the xmpp world?
             pass
