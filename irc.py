@@ -39,6 +39,7 @@ localaddress = ""
 connection = None
 charset = 'utf-8'
 socketlist = {}
+#each item is a tuple of 4 values, 0 == frequency in seconds, 1 == offset from 0, 2 == function, 3 == arguments
 timerlist = []
 
 MALFORMED_JID=ErrorNode(ERR_JID_MALFORMED,text='Invalid room, must be in form #room%server')
@@ -222,13 +223,13 @@ class Connect_Server_Command(xmpp.commands.Command_Handler_Prototype):
     name = 'connect-server'
     description = 'Connect to server'
     discofeatures = [xmpp.commands.NS_COMMANDS]
-    
+
     def __init__(self,transport,jid=''):
         """Initialise the command object"""
         xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
         self.initial = { 'execute':self.cmdFirstStage }
         self.transport = transport
-        
+
     def _DiscoHandler(self,conn,event,type):
         """The handler for discovery events"""
         fromjid = event.getFrom().getStripped().__str__()
@@ -276,13 +277,13 @@ class Disconnect_Server_Command(xmpp.commands.Command_Handler_Prototype):
     name = 'disconnect-server'
     description = 'Disconnect from server'
     discofeatures = [xmpp.commands.NS_COMMANDS]
-    
+
     def __init__(self,transport,jid=''):
         """Initialise the command object"""
         xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
         self.initial = { 'execute':self.cmdFirstStage }
         self.transport = transport
-        
+
     def _DiscoHandler(self,conn,event,type):
         """The handler for discovery events"""
         fromjid = event.getFrom().getStripped().__str__()
@@ -298,7 +299,7 @@ class Disconnect_Server_Command(xmpp.commands.Command_Handler_Prototype):
             return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,event,type)
         else:
             return None
-        
+
     def cmdFirstStage(self,conn,event):
         """Build the reply to complete the request"""
         frm = event.getFrom()
@@ -330,13 +331,13 @@ class Message_Of_The_Day(xmpp.commands.Command_Handler_Prototype):
     name = 'motd'
     description = 'Retrieve Message of the Day'
     discofeatures = [xmpp.commands.NS_COMMANDS]
-    
+
     def __init__(self,transport,jid=''):
         """Initialise the command object"""
         xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
         self.initial = { 'execute':self.cmdFirstStage }
         self.transport = transport
-        
+
     def _DiscoHandler(self,conn,event,type):
         """The handler for discovery events"""
         fromjid = event.getFrom().getStripped().__str__()
@@ -352,7 +353,7 @@ class Message_Of_The_Day(xmpp.commands.Command_Handler_Prototype):
             return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,event,type)
         else:
             return None
-        
+
     def cmdFirstStage(self,conn,event):
         """Build the reply to complete the request"""
         fromjid = event.getFrom().getStripped().__str__()
@@ -452,6 +453,7 @@ class Transport:
         self.irc.add_global_handler('nochanmodes',self.irc_notregistered)
         self.irc.add_global_handler('379',self.irc_redirect)
         self.irc.add_global_handler('featurelist',self.irc_featurelist)
+        self.irc.add_global_handler('ison',self.irc_ison)
         self.irc.add_global_handler('welcome',self.irc_welcome)
         self.irc.add_global_handler('600',self.irc_watchonline)
         self.irc.add_global_handler('604',self.irc_watchonline)
@@ -648,7 +650,7 @@ class Transport:
                     self.jabber.send(Presence(to=fromjid, frm=to, typ = 'unsubscribe'))
                     self.jabber.send(Presence(to=fromjid, frm=to, typ = 'unsubscribed'))
                     if type != 'unsubscribe':
-		        self.jabber.send(Error(event,ERR_BAD_REQUEST))
+                        self.jabber.send(Error(event,ERR_BAD_REQUEST))
                 return
             if type == 'subscribe':
                 self.jabber.send(Presence(to=fromjid, frm = to, typ = 'subscribe'))
@@ -718,13 +720,13 @@ class Transport:
                 if type != 'unsubscribed' and type != 'error':
                     self.jabber.send(Presence(to=fromjid, frm=to, typ = 'unsubscribe'))
                     self.jabber.send(Presence(to=fromjid, frm=to, typ = 'unsubscribed'))
-		    if type != 'unsubscribe':
+                    if type != 'unsubscribe':
                         self.jabber.send(Error(event,ERR_BAD_REQUEST))
                 return
             subscriptions = []
             if conf.has_key('subscriptions'):
                 subscriptions = conf['subscriptions']
-            
+
             if type == 'subscribe':
                 self.jabber.send(Presence(to=fromjid, frm = to, typ = 'subscribed'))
                 if not nick in subscriptions:
@@ -741,13 +743,19 @@ class Transport:
                       and self.users[fromjid].has_key(server) \
                       and self.users[fromjid][server].features.has_key('WATCH'):
                         self.users[fromjid][server].send_raw('WATCH -%s' % nick)
-            
+
             conf['subscriptions'] = subscriptions
             user = userfile[fromstripped]
             user['servers'][server] = conf
             userfile[fromstripped] = user
             userfile.sync()
-            
+
+            if (type == 'subscribe' or type == 'unsubscribe' or type == 'unsubscribed') \
+              and self.users.has_key(fromjid) \
+              and self.users[fromjid].has_key(server):
+                if not self.users[fromjid][server].features.has_key('WATCH'):
+                    self.irc_doison(self.users[fromjid][server])
+
     def xmpp_presence_do_update(self,event,server,fromjid):
         if fromjid not in self.users.keys() or \
             server not in self.users[fromjid].keys():
@@ -897,15 +905,15 @@ class Transport:
             nick = channel
         else:
             nick = to.getResource()
-        
+
         m = Iq(to=event.getFrom(),frm=to, typ='result')
         m.setID(id)
         p = m.addChild(name='vCard', namespace=NS_VCARD)
         p.setTagData(tag='DESC', val='Additional Information:')
-        
+
         conn.pendingoperations["whois:" + irc_ulower(nick)] = m
         conn.whois([(nick + ' ' + nick).encode(conn.charset)])
-        
+
         raise xmpp.NodeProcessed
 
     def xmpp_iq_agents(self, con, event):
@@ -1170,7 +1178,7 @@ class Transport:
         if not channel == '':
             self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
             raise xmpp.NodeProcessed
-        
+
         serverdetails = {'address':'','nick':'','password':'','realname':'','username':''}
         if userfile.has_key(fromjid):
             charset = userfile[fromjid]['charset']
@@ -1224,7 +1232,7 @@ class Transport:
             self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
             raise xmpp.NodeProcessed
         serverdetails = {}
-        
+
         query = event.getTag('query')
         if query.getTag('remove'):
             remove = True
@@ -1268,7 +1276,7 @@ class Transport:
         else:
             self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
             raise xmpp.NodeProcessed
-        
+
         if not remove:
             if userfile.has_key(fromjid):
                 conf = userfile[fromjid]
@@ -1344,17 +1352,18 @@ class Transport:
     def irc_doquit(self,conn,message=None):
         server = conn.server
         nickname = conn.nickname
+        if conn.isontimer in timerlist:
+            timerlist.remove(conn.isontimer)
         if self.jabber.isConnected():
             fromstripped = conn.fromjid.encode('utf8')
-            if conn.features.has_key('WATCH') \
-	      and userfile.has_key(fromstripped) \
+            if userfile.has_key(fromstripped) \
               and userfile[fromstripped].has_key('servers') \
               and userfile[fromstripped]['servers'].has_key(conn.server):
                 conf = userfile[fromstripped]['servers'][conn.server]
                 if conf.has_key('subscriptions'):
                     subscriptions = conf['subscriptions']
                     for nick in subscriptions:
-                        self.jabber.send(Presence(to=conn.fromjid, frm = '%s%%%s@%s' % (nick, conn.server, hostname), typ = 'unavailable'))                        
+                        self.jabber.send(Presence(to=conn.fromjid, frm = '%s%%%s@%s' % (nick, conn.server, hostname), typ = 'unavailable'))
             self.jabber.send(Presence(to=conn.fromjid, frm = '%s@%s' % (conn.server, hostname), typ = 'unavailable'))
         if self.users[conn.fromjid].has_key(server):
             del self.users[conn.fromjid][server]
@@ -1458,6 +1467,10 @@ class Transport:
                     conn.xresources[resource]=(event.getShow(),event.getPriority(),event.getStatus(),time.time())
                     print "New server resource login: %s" % conn.xresources
                     self.jabber.send(Presence(to=frm, frm='%s@%s' % (server, hostname)))
+                    if conn.features.has_key('WATCH'):
+                        conn.send_raw('WATCH')
+                    else:
+                        self.irc_doison(conn)
         else: # the other cases
             conn=self.irc_newconn(channel,server,nick,password,frm)
             if conn != None:
@@ -1496,7 +1509,7 @@ class Transport:
 
         if not nick:
             return None
-        
+
         try:
             addressdetails = address.split(':')
             if len(addressdetails) > 2: addressdetails = address.split('/') #probably ipv6, so split on /
@@ -1520,6 +1533,7 @@ class Transport:
             conn.away = ''
             conn.charset = ucharset
             conn.connectstatus = 'Connecting: '
+            conn.isonlist = []
             self.jabber.send(Presence(to=frm, frm = '%s@%s' % (server, hostname), status='Connecting...'))
             return conn
         except irclib.ServerConnectionError:
@@ -1533,7 +1547,6 @@ class Transport:
            conn.mode(channel,'')
         except:
            self.irc_doquit(conn)
-           
         class Channel:
             pass
 
@@ -1660,23 +1673,54 @@ class Transport:
 
     def irc_featurelist(self,conn,event):
         for feature in event.arguments():
-            try:
-                key,value = feature.split('=',1)
-            except ValueError:
-                key = feature
-                value = None
-            conn.features[key] = value
-        print 'features:%s'%repr(conn.features)
-        
+            if feature != 'are supported by this server':
+                try:
+                    key,value = feature.split('=',1)
+                except ValueError:
+                    key = feature
+                    value = None
+                conn.features[key] = value
+        #print 'features:%s'%repr(conn.features)
+
         fromstripped = conn.fromjid.encode('utf8')
-        if conn.features.has_key('WATCH') \
-          and userfile[fromstripped].has_key('servers') \
+        if userfile[fromstripped].has_key('servers') \
           and userfile[fromstripped]['servers'].has_key(conn.server):
             conf = userfile[fromstripped]['servers'][conn.server]
             if conf.has_key('subscriptions'):
                 subscriptions = conf['subscriptions']
-                for nick in subscriptions:
-                    conn.send_raw('WATCH +%s' % nick)
+                if conn.features.has_key('WATCH'):
+                    if conn.isontimer in timerlist:
+                        timerlist.remove(conn.isontimer)
+                        for nick in subscriptions:
+                            conn.send_raw('WATCH +%s' % nick)
+
+    def irc_doison(self,conn):
+        fromstripped = conn.fromjid.encode('utf8')
+        if userfile[fromstripped].has_key('servers') \
+          and userfile[fromstripped]['servers'].has_key(conn.server):
+            conf = userfile[fromstripped]['servers'][conn.server]
+            if conf.has_key('subscriptions'):
+                subscriptions = conf['subscriptions']
+                if not conn.features.has_key('WATCH'):
+                    if len(subscriptions) > 0:
+                        conn.ison(subscriptions)
+                    else:
+                        for nick in conn.isonlist:
+                            name = '%s%%%s' % (nick, conn.server)
+                            self.jabber.send(Presence(to=conn.fromjid, frm = '%s@%s' %(name, hostname), typ = 'unavailable'))
+                        conn.isonlist = []
+
+    def irc_ison(self,conn,event):
+        newlist = event.arguments()[0].split()
+        for nick in newlist:
+            if not nick in conn.isonlist:
+                name = '%s%%%s' % (nick, conn.server)
+                self.jabber.send(Presence(to=conn.fromjid, frm = '%s@%s' %(name, hostname)))
+        for nick in conn.isonlist:
+            if not nick in newlist:
+                name = '%s%%%s' % (nick, conn.server)
+                self.jabber.send(Presence(to=conn.fromjid, frm = '%s@%s' %(name, hostname), typ = 'unavailable'))
+        conn.isonlist = newlist
 
     def irc_watchonline(self,conn,event):
         # TODO: store contact status for when new resource comes online
@@ -1695,6 +1739,12 @@ class Transport:
     def irc_welcome(self,conn,event):
         conn.connectstatus = None
         self.jabber.send(Presence(to = conn.fromjid, frm = '%s@%s' %(conn.server,hostname)))
+
+        freq = 90 # ison query frequency in seconds
+        offset = int(time.time())%freq
+        conn.isontimer=(freq,offset,self.irc_doison,[conn])
+        timerlist.append(conn.isontimer)
+
         if conn.joinchan != '':
             self.irc_newroom(conn,conn.joinchan,conn.joinresource)
         #TODO: channel join operations should become pending operations
@@ -1740,7 +1790,7 @@ class Transport:
         error=ErrorNode(ERR_FORBIDDEN)
         #TODO: resource handling?
         self.jabber.send(Message(to=conn.fromjid, typ = 'error', frm = '%s%%%s@%s' % (event.source(), conn.server, hostname),payload=[error]))
-        
+
     def irc_redirect(self,conn,event):
         new = '%s%%%s@%s'% (unicode(event.arguments()[1],conn.charset,'replace'),conn.server, hostname)
         old = '%s%%%s@%s'% (unicode(event.arguments()[0],conn.charset,'replace'),conn.server, hostname)
@@ -1947,24 +1997,24 @@ class Transport:
         nick = irc_ulower(unicode(event.arguments()[0],conn.charset,'replace'))
         m = conn.pendingoperations["whois:" + nick]
         return m.getTag('vCard', namespace=NS_VCARD)
-        
+
     def irc_whoisuser(self,conn,event):
         p = self.irc_whoisgetvcard(conn,event)
         p.setTagData(tag='FN', val=unicode(event.arguments()[4],conn.charset,'replace'))
         p.setTagData(tag='NICKNAME', val=unicode(event.arguments()[0],conn.charset,'replace'))
         e = p.addChild(name='EMAIL')
         e.setTagData(tag='USERID', val=unicode(event.arguments()[1],conn.charset,'replace') + '@' + unicode(event.arguments()[2],conn.charset,'replace'))
-        
+
     def irc_whoisserver(self,conn,event):
         p = self.irc_whoisgetvcard(conn,event)
         o = p.addChild(name='ORG')
         o.setTagData(tag='ORGUNIT', val=unicode(event.arguments()[1],conn.charset,'replace'))
         o.setTagData(tag='ORGNAME', val=unicode(event.arguments()[2],conn.charset,'replace'))
-        
+
     def irc_whoisoperator(self,conn,event):
         p = self.irc_whoisgetvcard(conn,event)
         p.setTagData(tag='ROLE', val=unicode(event.arguments()[1],conn.charset,'replace'))
-        
+
     def irc_whoisidle(self,conn,event):
         p = self.irc_whoisgetvcard(conn,event)
         seconds = int(event.arguments()[1])
@@ -1973,11 +2023,11 @@ class Transport:
         p.setTagData(tag='DESC', val=p.getTagData(tag='DESC') + '\x0a' + 'Idle: %s hours %s mins %s secs' % (hours, minutes, seconds))
         if len(event.arguments()) > 3:
             p.setTagData(tag='DESC', val=p.getTagData(tag='DESC') + '\x0a' + 'Signon Time: ' + time.ctime(float(event.arguments()[2])))
-        
+
     def irc_whoischannels(self,conn,event):
         p = self.irc_whoisgetvcard(conn,event)
         p.setTagData(tag='TITLE', val=unicode(event.arguments()[1],conn.charset,'replace'))
-        
+
     def irc_endofwhois(self,conn,event):
         nick = irc_ulower(unicode(event.arguments()[0],conn.charset,'replace'))
         m = conn.pendingoperations["whois:" + nick]
@@ -1991,7 +2041,7 @@ class Transport:
             rep = conn.pendingoperations["list"]
             q=rep.getTag('query')
             q.addChild('item',{'name':chan,'jid':'%s%%%s@%s' % (JIDEncode(chan), conn.server, hostname)})
-        
+
     def irc_listend(self,conn,event):
         rep = conn.pendingoperations["list"]
         del conn.pendingoperations["list"]
@@ -2041,12 +2091,12 @@ class Transport:
             except ValueError:
                 channel=''
                 server=room
-                
+
             if conn.channels.has_key(channel):
                 resources = conn.channels[channel].resources
             else:
                 resources = conn.xresources
-            
+
             if resources != {}:
                 return chat[0],'%s/%s'%(conn.fromjid,self.find_highest_resource(resources)),chat[3]
             else:
@@ -2259,6 +2309,22 @@ if __name__ == '__main__':
             else:
                 try:
                     ircobj.process_data([each])
+                except:
+                    if logfile != None:
+                        logfile.write(time.strftime('%a %d %b %Y %H:%M:%S\n'))
+                        traceback.print_exc(file=logfile)
+                        logfile.flush()
+                    if fatalerrors:
+                        _pendingException = sys.exc_info()
+                        raise _pendingException[0], _pendingException[1], _pendingException[2]
+                    sys.stderr.write(time.strftime('%a %d %b %Y %H:%M:%S\n'))
+                    traceback.print_exc()
+        #delayed execution method modified from python-irclib written by Joel Rosdahl <joel@rosdahl.net>
+        for each in timerlist:
+            #print int(time.time())%each[0]-each[1]
+            if not (int(time.time())%each[0]-each[1]):
+                try:
+                    apply(each[2],each[3])
                 except:
                     if logfile != None:
                         logfile.write(time.strftime('%a %d %b %Y %H:%M:%S\n'))
