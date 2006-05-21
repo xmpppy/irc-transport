@@ -3,8 +3,8 @@
 import xmpp, string
 from xmpp.protocol import *
 import xmpp.commands
-
-administrators = []
+import config
+from xml.dom.minidom import parse
 
 """This file is the JEP-0133 commands I feel are applicable to the transports.
 
@@ -33,23 +33,23 @@ class Online_Users_Command(xmpp.commands.Command_Handler_Prototype):
     name = NS_ADMIN_ONLINE_USERS
     description = 'Get List of Online Users'
     discofeatures = [xmpp.commands.NS_COMMANDS,xmpp.NS_DATA]
-    
+
     def __init__(self,transport,jid=''):
         """Initialise the command object"""
         xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
         self.initial = { 'execute':self.cmdFirstStage }
         self.transport = transport
-        
+
     def _DiscoHandler(self,conn,request,type):
         """The handler for discovery events"""
-        if request.getFrom().getStripped() in administrators:
+        if request.getFrom().getStripped() in config.admins:
             return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,request,type)
         else:
             return None
-        
+
     def cmdFirstStage(self,conn,request):
         """Build the reply to complete the request"""
-        if request.getFrom().getStripped() in administrators:
+        if request.getFrom().getStripped() in config.admins:
             reply = request.buildReply('result')
             form = DataForm(typ='result',data=[DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='The list of online users',name='onlineuserjids',value=self.transport.users.keys(),typ='jid-multi')])
             reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
@@ -57,30 +57,30 @@ class Online_Users_Command(xmpp.commands.Command_Handler_Prototype):
         else:
             self._owner.send(Error(request,ERR_FORBIDDEN))
         raise NodeProcessed
-            
+
 class Active_Users_Command(xmpp.commands.Command_Handler_Prototype):
     """This is the active users command as documented in section 4.21 of JEP-0133.
     At the current time, no provision is made for splitting the userlist into sections"""
     name = NS_ADMIN_ACTIVE_USERS
     description = 'Get List of Active Users'
     discofeatures = [xmpp.commands.NS_COMMANDS,xmpp.NS_DATA]
-    
+
     def __init__(self,transport,jid=''):
         """Initialise the command object"""
         xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
         self.initial = { 'execute':self.cmdFirstStage }
         self.transport = transport
-        
+
     def _DiscoHandler(self,conn,request,type):
         """The handler for discovery events"""
-        if request.getFrom().getStripped() in administrators:
+        if request.getFrom().getStripped() in config.admins:
             return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,request,type)
         else:
             return None
-        
+
     def cmdFirstStage(self,conn,request):
         """Build the reply to complete the request"""
-        if request.getFrom().getStripped() in administrators:
+        if request.getFrom().getStripped() in config.admins:
             reply = request.buildReply('result')
             form = DataForm(typ='result',data=[DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='The list of active users',name='activeuserjids',value=self.transport.users.keys(),typ='jid-multi')])
             reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
@@ -88,30 +88,30 @@ class Active_Users_Command(xmpp.commands.Command_Handler_Prototype):
         else:
             self._owner.send(Error(request,ERR_FORBIDDEN))
         raise NodeProcessed
-            
+
 class Registered_Users_Command(xmpp.commands.Command_Handler_Prototype):
     """This is the active users command as documented in section 4.18 of JEP-0133.
     At the current time, no provision is made for splitting the userlist into sections"""
     name = NS_ADMIN_REGISTERED_USERS
     description = 'Get List of Registered Users'
     discofeatures = [xmpp.commands.NS_COMMANDS,xmpp.NS_DATA]
-    
+
     def __init__(self,transport,jid=''):
         """Initialise the command object"""
         xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
         self.initial = { 'execute':self.cmdFirstStage }
         self.transport = transport
-        
+
     def _DiscoHandler(self,conn,request,type):
         """The handler for discovery events"""
-        if request.getFrom().getStripped() in administrators:
+        if request.getFrom().getStripped() in config.admins:
             return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,request,type)
         else:
             return None
-        
+
     def cmdFirstStage(self,conn,request):
         """Build the reply to complete the request"""
-        if request.getFrom().getStripped() in administrators:
+        if request.getFrom().getStripped() in config.admins:
             reply = request.buildReply('result')
             form = DataForm(typ='result',data=[DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='The list of registered users',name='registereduserjids',value=self.transport.userfile.keys(),typ='jid-multi')])
             reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
@@ -127,60 +127,77 @@ class Edit_Admin_List_Command(xmpp.commands.Command_Handler_Prototype):
     name = NS_ADMIN_EDIT_ADMIN
     description = 'Edit Admin List'
     discofeatures = [xmpp.commands.NS_COMMANDS, xmpp.NS_DATA]
-    
-    def __init__(self,transport,configfile,configfilename,jid=''):
+
+    def __init__(self,transport,jid=''):
         """Initialise the command object"""
         xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
         self.initial = {'execute':self.cmdFirstStage }
         self.transport = transport
-        self.configfile = configfile
-        self.configfilename = configfilename
-        
+
     def _DiscoHandler(self,conn,request,type):
         """The handler for discovery events"""
-        if request.getFrom().getStripped() in administrators:
+        if request.getFrom().getStripped() in config.admins:
             return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,request,type)
         else:
             return None
-        
+
     def cmdFirstStage(self,conn,request):
         """Set the session ID, and return the form containing the current administrators"""
-        if request.getFrom().getStripped() in administrators:
+        if request.getFrom().getStripped() in config.admins:
            # Setup session ready for form reply
            session = self.getSessionID()
            self.sessions[session] = {'jid':request.getFrom(),'actions':{'cancel':self.cmdCancel,'next':self.cmdSecondStage,'execute':self.cmdSecondStage}}
            # Setup form with existing data in
            reply = request.buildReply('result')
-           form = DataForm(title='Editing the Admin List',data=['Fill out this form to edit the list of entities who have administrative privileges', DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='The Admin List', typ='jid-multi', name='adminjids',value=administrators)])
+           form = DataForm(title='Editing the Admin List',data=['Fill out this form to edit the list of entities who have administrative privileges', DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='The Admin List', typ='jid-multi', name='adminjids',value=config.admins)])
            replypayload = [Node('actions',attrs={'execute':'next'},payload=[Node('next')]),form]
            reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':session,'status':'executing'},payload=replypayload)
            self._owner.send(reply)
         else:
            self._owner.send(Error(request,ERR_FORBIDDEN))
         raise NodeProcessed
-           
+
     def cmdSecondStage(self,conn,request):
         """Apply and save the config"""
         form = DataForm(node=request.getTag(name='command').getTag(name='x',namespace=NS_DATA))
         session = request.getTagAttr('command','sessionid')
         if self.sessions.has_key(session):
             if self.sessions[session]['jid'] == request.getFrom():
-                global administrators
-                administrators = form.getField('adminjids').getValues()
-                adminstr = string.join(administrators, ",")
-                self.configfile.set('transport','Administrators',adminstr)
-                f = open(self.configfilename,'w')
-                self.configfile.write(f)
-                f.close()
+                config.admins = form.getField('adminjids').getValues()
+                doc = parse(config.configFile)
+                admins = doc.getElementsByTagName('admins')[0]
+                for el in [x for x in admins.childNodes]:
+                    admins.removeChild(el)
+                    el.unlink()
+                for admin in config.admins:
+                    txt = doc.createTextNode('\n        ')
+                    admins.appendChild(txt)
+                    txt = doc.createTextNode(admin)
+                    el = doc.createElement('jid')
+                    el.appendChild(txt)
+                    admins.appendChild(el)
+                txt = doc.createTextNode('\n    ')
+                admins.appendChild(txt)
+                attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':session,'status':'completed'}
+                payload=[]
+                try:
+                    f = open(config.configFile,'w')
+                    doc.writexml(f)
+                    f.close()
+                except IOError, (errno, strerror):
+                    # attrs['status'] = 'canceled' # Psi doesn't display the form if we cancel the command
+                    form = DataForm(typ='result',data=[DataField(value="I/O error(%s): %s" % (errno, strerror),typ='fixed')])
+                    payload.append(form)
+                doc.unlink()
                 reply = request.buildReply('result')
-                reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':session,'status':'completed'})
+                reply.addChild(name='command',attrs=attrs,payload=payload)
                 self._owner.send(reply)
             else:
                 self._owner.send(Error(request,ERR_BAD_REQUEST))
         else:
             self._owner.send(Error(request,ERR_BAD_REQUEST))   
         raise NodeProcessed
-            
+
     def cmdCancel(self,conn,request):
         session = request.getTagAttr('command','sessionid')
         if self.sessions.has_key(session):
@@ -198,23 +215,23 @@ class Restart_Service_Command(xmpp.commands.Command_Handler_Prototype):
     name = NS_ADMIN_RESTART
     description = 'Restart Service'
     discofeatures = [xmpp.commands.NS_COMMANDS, xmpp.NS_DATA]
-    
+
     def __init__(self,transport,jid=''):
         """Initialise the command object"""
         xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
         self.initial = {'execute':self.cmdFirstStage }
         self.transport = transport
-        
+
     def _DiscoHandler(self,conn,request,type):
         """The handler for discovery events"""
-        if request.getFrom().getStripped() in administrators:
+        if request.getFrom().getStripped() in config.admins:
             return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,request,type)
         else:
             return None
-        
+
     def cmdFirstStage(self,conn,request):
-        """Set the session ID, and return the form containing the current administrators"""
-        if request.getFrom().getStripped() in administrators:
+        """Set the session ID, and return the form containing the restart reason"""
+        if request.getFrom().getStripped() in config.admins:
            # Setup session ready for form reply
            session = self.getSessionID()
            self.sessions[session] = {'jid':request.getFrom(),'actions':{'cancel':self.cmdCancel,'next':self.cmdSecondStage,'execute':self.cmdSecondStage}}
@@ -227,13 +244,14 @@ class Restart_Service_Command(xmpp.commands.Command_Handler_Prototype):
         else:
            self._owner.send(Error(request,ERR_FORBIDDEN))
         raise NodeProcessed
-           
+
     def cmdSecondStage(self,conn,request):
         """Apply and save the config"""
         form = DataForm(node=request.getTag(name='command').getTag(name='x',namespace=NS_DATA))
         session = request.getTagAttr('command','sessionid')
         if self.sessions.has_key(session):
             if self.sessions[session]['jid'] == request.getFrom():
+                self.transport.offlinemsg = '\n'.join(form.getField('announcement').getValues())
                 self.transport.restart = 1
                 self.transport.online = 0
                 reply = request.buildReply('result')
@@ -244,7 +262,7 @@ class Restart_Service_Command(xmpp.commands.Command_Handler_Prototype):
         else:
             self._owner.send(Error(request,ERR_BAD_REQUEST))   
         raise NodeProcessed
-            
+
     def cmdCancel(self,conn,request):
         session = request.getTagAttr('command','sessionid')
         if self.sessions.has_key(session):
@@ -261,23 +279,23 @@ class Shutdown_Service_Command(xmpp.commands.Command_Handler_Prototype):
     name = NS_ADMIN_SHUTDOWN
     description = 'Shut Down Service'
     discofeatures = [xmpp.commands.NS_COMMANDS, xmpp.NS_DATA]
-    
+
     def __init__(self,transport,jid=''):
         """Initialise the command object"""
         xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
         self.initial = {'execute':self.cmdFirstStage }
         self.transport = transport
-        
+
     def _DiscoHandler(self,conn,request,type):
         """The handler for discovery events"""
-        if request.getFrom().getStripped() in administrators:
+        if request.getFrom().getStripped() in config.admins:
             return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,request,type)
         else:
             return None
-        
+
     def cmdFirstStage(self,conn,request):
-        """Set the session ID, and return the form containing the current administrators"""
-        if request.getFrom().getStripped() in administrators:
+        """Set the session ID, and return the form containing the shutdown reason"""
+        if request.getFrom().getStripped() in config.admins:
            # Setup session ready for form reply
            session = self.getSessionID()
            self.sessions[session] = {'jid':request.getFrom(),'actions':{'cancel':self.cmdCancel,'next':self.cmdSecondStage,'execute':self.cmdSecondStage}}
@@ -290,13 +308,14 @@ class Shutdown_Service_Command(xmpp.commands.Command_Handler_Prototype):
         else:
            self._owner.send(Error(request,ERR_FORBIDDEN))
         raise NodeProcessed
-           
+
     def cmdSecondStage(self,conn,request):
         """Apply and save the config"""
         form = DataForm(node=request.getTag(name='command').getTag(name='x',namespace=NS_DATA))
         session = request.getTagAttr('command','sessionid')
         if self.sessions.has_key(session):
             if self.sessions[session]['jid'] == request.getFrom():
+                self.transport.offlinemsg = '\n'.join(form.getField('announcement').getValues())
                 self.transport.online = 0
                 reply = request.buildReply('result')
                 reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':session,'status':'completed'})
@@ -306,7 +325,7 @@ class Shutdown_Service_Command(xmpp.commands.Command_Handler_Prototype):
         else:
             self._owner.send(Error(request,ERR_BAD_REQUEST))   
         raise NodeProcessed
-            
+
     def cmdCancel(self,conn,request):
         session = request.getTagAttr('command','sessionid')
         if self.sessions.has_key(session):

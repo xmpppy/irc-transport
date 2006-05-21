@@ -15,15 +15,7 @@ To make the irclib library integrate with the transport more effectively you nee
 Configure the Transport:
 ------------------------
 
-To configure the transport you need to modify your jabber server configuration to expose the irc-transport to users. The transport itself has a configuration file which contains the following:
-
-[transport]
-Server: name.of.jabber.server
-Hostname: name.of.irc.transport
-Port: portnumber
-Secret: sharedsecret
-LocalAddress: ip-address-for-irc-connections
-Charset: 8-bit charset to use when not UTF-8 encoded from network (all traffic out to irc is encoded as this type.) e.g. koi8-r shift-jis or gb2313
+To configure the transport you need to modify your jabber server configuration to expose the irc-transport to users. The transport itself has a configuration file which it reads on startup.  A sample configuration file is provided, copy it as config.xml and change the settings as required.
 
 The default Python Encoding:
 ----------------------------
