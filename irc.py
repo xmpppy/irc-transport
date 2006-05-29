@@ -39,6 +39,10 @@ NODE_REGISTERED_SERVERS='registered-servers'
 NODE_ONLINE_SERVERS='online-servers'
 NODE_ONLINE_CHANNELS='online-channels'
 NODE_ACTIVE_CHANNELS='active-channels'
+NODE_ADMIN='admin'
+NODE_ADMIN_REGISTERED_USERS='registered-users'
+NODE_ADMIN_ONLINE_USERS='online-users'
+NODE_ADMIN_SERVERS='servers'
 # This is the list of charsets that python supports.  Detecting this list at runtime is really difficult, so it's hardcoded here.
 charsets = ['','ascii','big5','big5hkscs','cp037','cp424','cp437','cp500','cp737','cp775','cp850','cp852','cp855','cp856','cp857','cp860','cp861','cp862','cp863','cp864','cp865','cp866','cp869','cp874','cp875','cp932','cp949','cp950','cp1006','cp1026','cp1140','cp1250','cp1251','cp1252','cp1253','cp1254','cp1255','cp1256','cp1257','cp1258','euc-jp','euc-jis-2004','euc-jisx0213','euc-kr','gb2312','gbk','gb18030','hz','iso2022-jp','iso2022-jp-1','iso2022-jp-2','iso2022-jp-2004','iso2022-jp-3','iso2022-jp-ext','iso2022-kr','latin-1','iso8859-1','iso8859-2','iso8859-3','iso8859-4','iso8859-5','iso8859-6','iso8859-7','iso8859-8','iso8859-9','iso8859-10','iso8859-13','iso8859-14','iso8859-15','johab','koi8-r','koi8-u','mac-cyrillic','mac-greek','mac-iceland','mac-latin2','mac-roman','mac-turkish','ptcp154','shift-jis','shift-jis-2004','shift-jisx0213','utf-16','utf-16-be','utf-16-le','utf-7','utf-8']
 irccolour = ['#FFFFFF','#000000','#0000FF','#00FF00','#FF0000','#F08000','#8000FF','#FFF000','#FFFF00','#80FF00','#00FF80','#00FFFF','#0080FF','#FF80FF','#808080','#A0A0A0']
@@ -542,10 +546,22 @@ class Transport:
                             {'category':'gateway','type':'irc','name':VERSTR}],
                         'features':[NS_REGISTER,NS_VERSION,NS_MUC,NS_COMMANDS]}
                 if type == 'items':
-                    return [
-                        {'node':NS_COMMANDS,'name':config.discoName + ' Commands','jid':config.jid},
+                    list = [
                         {'node':NODE_REGISTERED_SERVERS,'name':config.discoName + ' Registered Servers','jid':config.jid},
                         {'node':NODE_ONLINE_SERVERS,'name':config.discoName + ' Online Servers','jid':config.jid}]
+                    if fromjid in config.admins:
+                        list.append({'node':NODE_ADMIN,'name':config.discoName + ' Admin','jid':config.jid})
+                    return list
+            elif node == NODE_ADMIN:
+                if type == 'info':
+                    return {'ids':[],'features':[]}
+                if type == 'items':
+                    if not fromjid in config.admins:
+                        return []
+                    return [
+                        {'node':NS_COMMANDS,'name':config.discoName + ' Commands','jid':config.jid},
+                        {'node':NODE_ADMIN_REGISTERED_USERS,'name':config.discoName + ' Registered Users','jid':config.jid},
+                        {'node':NODE_ADMIN_ONLINE_USERS,'name':config.discoName + ' Online Users','jid':config.jid}]
             elif node == NODE_REGISTERED_SERVERS:
                 if type == 'info':
                     return {'ids':[],'features':[]}
@@ -566,6 +582,59 @@ class Transport:
                     if self.users.has_key(fromjid):
                         for each in self.users[fromjid].keys():
                             list.append({'name':each,'jid':'%s@%s' % (each, config.jid)})
+                    return list
+            elif node.startswith(NODE_ADMIN_REGISTERED_USERS):
+                if type == 'info':
+                    return {'ids':[],'features':[]}
+                if type == 'items':
+                    if not fromjid in config.admins:
+                        return []
+                    nodeinfo = node.split('/')
+                    list = []
+                    if len(nodeinfo) == 1:
+                        for each in userfile.keys():
+                            list.append({'node':'/'.join([NODE_ADMIN_REGISTERED_USERS, each]),'name':each,'jid':config.jid})
+                    elif len(nodeinfo) == 2:
+                        fromjid = nodeinfo[1]
+                        list = [
+                            {'node':'/'.join([NODE_ADMIN_REGISTERED_USERS, fromjid, NODE_ADMIN_SERVERS]),'name':fromjid + ' Registered Servers','jid':config.jid}]
+                    elif len(nodeinfo) == 3:
+                        fromstripped = nodeinfo[1].encode('utf8')
+                        node = nodeinfo[2]
+                        if node == NODE_ADMIN_SERVERS:
+                            servers = []
+                            if userfile.has_key(fromstripped):
+                                if userfile[fromstripped].has_key('servers'):
+                                    servers = userfile[fromstripped]['servers']
+                            for each in servers:
+                                address = each
+                                if servers[each]['address']:
+                                    address = servers[each]['address']
+                                list.append({'node':'/'.join([NODE_ADMIN_REGISTERED_USERS, fromjid, NODE_ADMIN_SERVERS, each]),'name':address,'jid':config.jid})
+                    return list
+            elif node.startswith(NODE_ADMIN_ONLINE_USERS):
+                if type == 'info':
+                    return {'ids':[],'features':[]}
+                if type == 'items':
+                    if not fromjid in config.admins:
+                        return []
+                    nodeinfo = node.split('/')
+                    list = []
+                    if len(nodeinfo) == 1:
+                        for each in self.users.keys():
+                            list.append({'node':'/'.join([NODE_ADMIN_ONLINE_USERS, each]),'name':each,'jid':config.jid})
+                    elif len(nodeinfo) == 2:
+                        fromjid = nodeinfo[1]
+                        list = [
+                            {'node':'/'.join([NODE_ADMIN_ONLINE_USERS, fromjid, NODE_ADMIN_SERVERS]),'name':fromjid + ' Online Servers','jid':config.jid}]
+                    elif len(nodeinfo) == 3:
+                        fromjid = nodeinfo[1]
+                        node = nodeinfo[2]
+                        if node == NODE_ADMIN_SERVERS:
+                            if self.users.has_key(fromjid):
+                                for each in self.users[fromjid].keys():
+                                    conn = self.users[fromjid][each]
+                                    list.append({'node':'/'.join([NODE_ADMIN_ONLINE_USERS, fromjid, NODE_ADMIN_SERVERS, each]),'name':'%s:%s'%(conn.address,conn.port),'jid':config.jid})
                     return list
             else:
                 self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))
@@ -725,6 +794,8 @@ class Transport:
             elif type == 'unavailable':
                 self.irc_disconnect(channel,server,fromjid,status)
                 self.xmpp_presence_do_update(event,server,fromstripped)
+            elif type == 'error':
+                return
             else:
                 self.jabber.send(Error(event,ERR_FEATURE_NOT_IMPLEMENTED))
         else:
@@ -1541,6 +1612,7 @@ class Transport:
             conn=self.irc.server().connect(address,port,nick,password,username,realname,config.host)
             conn.server = server
             conn.address = address
+            conn.port = port
             conn.fromjid = fromjid
             conn.features = {}
             conn.joinchan = channel
@@ -1919,7 +1991,6 @@ class Transport:
                     conn.channels[channel].key = args[1]
                 else:
                     conn.channels[channel].key = ''
-                pass
 
     def irc_part(self,conn,event):
         type = 'unavailable'
@@ -2187,15 +2258,12 @@ class Transport:
         line,xhtml = colourparse(event.arguments()[1],conn.charset)
         self.jabber.send(Presence(to=conn.fromjid, frm = '%s@%s' %(name, config.jid), show='away', status=line))
         # TODO: poll (via whois?) away status of online contacts
-        pass
 
     def irc_nowaway(self,conn,event):
         self.jabber.send(Presence(to=conn.fromjid, frm = '%s@%s' %(conn.server, config.jid), show='away'))
-        pass
 
     def irc_unaway(self,conn,event):
         self.jabber.send(Presence(to=conn.fromjid, frm = '%s@%s' %(conn.server, config.jid)))
-        pass
 
     def irc_ctcp(self,conn,event):
         nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
@@ -2224,7 +2292,6 @@ class Transport:
         elif event.arguments()[0] == 'VERSION':
             # TODO: real version reply back to the xmpp world?
             pass
-        pass
 
     def xmpp_connect(self):
         connected = self.jabber.connect((config.mainServer,config.port))

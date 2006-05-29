@@ -163,6 +163,8 @@ class Edit_Admin_List_Command(xmpp.commands.Command_Handler_Prototype):
         if self.sessions.has_key(session):
             if self.sessions[session]['jid'] == request.getFrom():
                 config.admins = form.getField('adminjids').getValues()
+                if len(config.admins) == 1 and len(config.admins[0]) == 0:
+                    config.admins = []
                 doc = parse(config.configFile)
                 admins = doc.getElementsByTagName('admins')[0]
                 for el in [x for x in admins.childNodes]:
