@@ -199,11 +199,10 @@ class Connect_Registered_Users_Command(xmpp.commands.Command_Handler_Prototype):
     description = 'Connect all registered users'
     discofeatures = [xmpp.commands.NS_COMMANDS]
 
-    def __init__(self,transport,jid=''):
+    def __init__(self,jid=''):
         """Initialise the command object"""
         xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
         self.initial = { 'execute':self.cmdFirstStage }
-        self.transport = transport
 
     def _DiscoHandler(self,conn,request,type):
         """The handler for discovery events"""
@@ -215,7 +214,6 @@ class Connect_Registered_Users_Command(xmpp.commands.Command_Handler_Prototype):
     def cmdFirstStage(self,conn,request):
         """Build the reply to complete the request"""
         if request.getFrom().getStripped() in config.admins:
-            print repr(transport.users)
             for each in userfile.keys():
                 connection.send(Presence(to=each, frm = config.jid, typ = 'probe'))
                 if userfile[each].has_key('servers'):
@@ -498,15 +496,15 @@ class Transport:
         self.disco.PlugIn(self.jabber)
         self.command = Commands(self.disco)
         self.command.PlugIn(self.jabber)
-        self.cmdconnectusers = Connect_Registered_Users_Command(self,jid=config.jid)
+        self.cmdconnectusers = Connect_Registered_Users_Command(jid=config.jid)
         self.cmdconnectusers.plugin(self.command)
-        self.cmdonlineusers = Online_Users_Command(self,jid=config.jid)
+        self.cmdonlineusers = Online_Users_Command(self.users,jid=config.jid)
         self.cmdonlineusers.plugin(self.command)
-        self.cmdactiveusers = Active_Users_Command(self,jid=config.jid)
+        self.cmdactiveusers = Active_Users_Command(self.users,jid=config.jid)
         self.cmdactiveusers.plugin(self.command)
-        self.cmdregisteredusers = Registered_Users_Command(self,jid=config.jid)
+        self.cmdregisteredusers = Registered_Users_Command(userfile,jid=config.jid)
         self.cmdregisteredusers.plugin(self.command)
-        self.cmdeditadminusers = Edit_Admin_List_Command(self,jid=config.jid)
+        self.cmdeditadminusers = Edit_Admin_List_Command(jid=config.jid)
         self.cmdeditadminusers.plugin(self.command)
         self.cmdrestartservice = Restart_Service_Command(self,jid=config.jid)
         self.cmdrestartservice.plugin(self.command)

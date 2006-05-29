@@ -34,11 +34,11 @@ class Online_Users_Command(xmpp.commands.Command_Handler_Prototype):
     description = 'Get List of Online Users'
     discofeatures = [xmpp.commands.NS_COMMANDS,xmpp.NS_DATA]
 
-    def __init__(self,transport,jid=''):
+    def __init__(self,users,jid=''):
         """Initialise the command object"""
         xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
         self.initial = { 'execute':self.cmdFirstStage }
-        self.transport = transport
+        self.users = users
 
     def _DiscoHandler(self,conn,request,type):
         """The handler for discovery events"""
@@ -51,7 +51,7 @@ class Online_Users_Command(xmpp.commands.Command_Handler_Prototype):
         """Build the reply to complete the request"""
         if request.getFrom().getStripped() in config.admins:
             reply = request.buildReply('result')
-            form = DataForm(typ='result',data=[DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='The list of online users',name='onlineuserjids',value=self.transport.users.keys(),typ='jid-multi')])
+            form = DataForm(typ='result',data=[DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='The list of online users',name='onlineuserjids',value=self.users.keys(),typ='jid-multi')])
             reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
             self._owner.send(reply)
         else:
@@ -65,11 +65,11 @@ class Active_Users_Command(xmpp.commands.Command_Handler_Prototype):
     description = 'Get List of Active Users'
     discofeatures = [xmpp.commands.NS_COMMANDS,xmpp.NS_DATA]
 
-    def __init__(self,transport,jid=''):
+    def __init__(self,users,jid=''):
         """Initialise the command object"""
         xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
         self.initial = { 'execute':self.cmdFirstStage }
-        self.transport = transport
+        self.users = users
 
     def _DiscoHandler(self,conn,request,type):
         """The handler for discovery events"""
@@ -82,7 +82,7 @@ class Active_Users_Command(xmpp.commands.Command_Handler_Prototype):
         """Build the reply to complete the request"""
         if request.getFrom().getStripped() in config.admins:
             reply = request.buildReply('result')
-            form = DataForm(typ='result',data=[DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='The list of active users',name='activeuserjids',value=self.transport.users.keys(),typ='jid-multi')])
+            form = DataForm(typ='result',data=[DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='The list of active users',name='activeuserjids',value=self.users.keys(),typ='jid-multi')])
             reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
             self._owner.send(reply)
         else:
@@ -96,11 +96,11 @@ class Registered_Users_Command(xmpp.commands.Command_Handler_Prototype):
     description = 'Get List of Registered Users'
     discofeatures = [xmpp.commands.NS_COMMANDS,xmpp.NS_DATA]
 
-    def __init__(self,transport,jid=''):
+    def __init__(self,userfile,jid=''):
         """Initialise the command object"""
         xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
         self.initial = { 'execute':self.cmdFirstStage }
-        self.transport = transport
+        self.userfile = userfile
 
     def _DiscoHandler(self,conn,request,type):
         """The handler for discovery events"""
@@ -113,7 +113,7 @@ class Registered_Users_Command(xmpp.commands.Command_Handler_Prototype):
         """Build the reply to complete the request"""
         if request.getFrom().getStripped() in config.admins:
             reply = request.buildReply('result')
-            form = DataForm(typ='result',data=[DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='The list of registered users',name='registereduserjids',value=self.transport.userfile.keys(),typ='jid-multi')])
+            form = DataForm(typ='result',data=[DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='The list of registered users',name='registereduserjids',value=self.userfile.keys(),typ='jid-multi')])
             reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
             self._owner.send(reply)
         else:
@@ -128,11 +128,10 @@ class Edit_Admin_List_Command(xmpp.commands.Command_Handler_Prototype):
     description = 'Edit Admin List'
     discofeatures = [xmpp.commands.NS_COMMANDS, xmpp.NS_DATA]
 
-    def __init__(self,transport,jid=''):
+    def __init__(self,jid=''):
         """Initialise the command object"""
         xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
         self.initial = {'execute':self.cmdFirstStage }
-        self.transport = transport
 
     def _DiscoHandler(self,conn,request,type):
         """The handler for discovery events"""
