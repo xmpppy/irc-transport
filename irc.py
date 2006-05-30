@@ -2273,7 +2273,7 @@ class Transport:
 
     def xmpp_connect(self):
         connected = self.jabber.connect((config.mainServer,config.port))
-        if connected == 'tcp':
+        if connected:
             self.register_handlers()
             #print "try auth"
             connected = self.jabber.auth(config.saslUsername,config.secret)
@@ -2309,12 +2309,14 @@ def irc_del_conn(con):
         del socketlist[con]
 
 def logError():
+    err = '%s - %s\n'%(time.strftime('%a %d %b %Y %H:%M:%S'),version)
     if logfile != None:
-        logfile.write(time.strftime('%a %d %b %Y %H:%M:%S\n'))
+        logfile.write(err)
         traceback.print_exc(file=logfile)
         logfile.flush()
-    sys.stderr.write(time.strftime('%a %d %b %Y %H:%M:%S\n'))
+    sys.stderr.write(err)
     traceback.print_exc()
+    sys.exc_clear()
 
 def sigHandler(signum, frame):
     #transport.offlinemsg = 'Signal handler called with signal %s'%signum
@@ -2393,7 +2395,7 @@ if __name__ == '__main__':
                     apply(each[2],each[3])
                 except:
                     logError()
-    for each in transport.users.keys():
+    for each in [x for x in transport.users.keys()]:
         for item in transport.users[each].keys():
             transport.irc_doquit(transport.users[each][item])
         connection.send(Presence(to=each, frm = config.jid, typ = 'unavailable', status = transport.offlinemsg))
