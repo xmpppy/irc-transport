@@ -919,7 +919,7 @@ class Transport:
             return
         if type == 'groupchat':
             print "Groupchat"
-            if irclib.is_channel(channel):
+            if irclib.is_channel(channel) and conn.channels.has_key(channel):
                 print "channel:", event.getBody().encode('utf8')
                 if event.getSubject():
                     print "subject"
