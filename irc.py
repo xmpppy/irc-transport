@@ -2,31 +2,21 @@
 # $Id$
 version = 'CVS ' + '$Revision$'.split()[1]
 #
-# xmpp->IRC transport
-# Jan 2004 Copyright (c) Mike Albon
+# IRC transport
+# January 2004 Copyright (c) Mike Albon
 # 2006 Copyright (c) Norman Rasmussen
 #
 # This program is free software licensed with the GNU Public License Version 2.
 # For a full copy of the license please go here http://www.gnu.org/licenses/licenses.html#GPL
 
-
-## Unicode Notes
-#
-# All data between irc and jabber must be translated to and from the connection character set.
-#
-# All internal datastructures are held in UTF8 unicode objects.
-
-import xmpp, urllib2, sys, time, irclib, re, ConfigParser, os, platform, select, codecs, shelve, socket
+import codecs, ConfigParser, os, platform, re, select, shelve, signal, socket, sys, time, traceback
+import irclib
 from xmpp.protocol import *
-from xmpp.features import *
 from xmpp.browser import *
 from xmpp.commands import *
-from jep0133 import *
-import xmpp.commands
-import jep0133
 from xmpp.jep0106 import *
-import traceback
-import config, xmlconfig, signal
+import config, xmlconfig
+from jep0133 import *
 
 #Global definitions
 VERSTR = 'IRC Transport'
@@ -43,6 +33,13 @@ NODE_ADMIN='admin'
 NODE_ADMIN_REGISTERED_USERS='registered-users'
 NODE_ADMIN_ONLINE_USERS='online-users'
 NODE_ADMIN_SERVERS='servers'
+
+## Unicode Notes
+#
+# All data between irc and jabber must be translated to and from the connection character set.
+#
+# All internal datastructures are held in UTF8 unicode objects.
+
 # This is the list of charsets that python supports.  Detecting this list at runtime is really difficult, so it's hardcoded here.
 charsets = ['','ascii','big5','big5hkscs','cp037','cp424','cp437','cp500','cp737','cp775','cp850','cp852','cp855','cp856','cp857','cp860','cp861','cp862','cp863','cp864','cp865','cp866','cp869','cp874','cp875','cp932','cp949','cp950','cp1006','cp1026','cp1140','cp1250','cp1251','cp1252','cp1253','cp1254','cp1255','cp1256','cp1257','cp1258','euc-jp','euc-jis-2004','euc-jisx0213','euc-kr','gb2312','gbk','gb18030','hz','iso2022-jp','iso2022-jp-1','iso2022-jp-2','iso2022-jp-2004','iso2022-jp-3','iso2022-jp-ext','iso2022-kr','latin-1','iso8859-1','iso8859-2','iso8859-3','iso8859-4','iso8859-5','iso8859-6','iso8859-7','iso8859-8','iso8859-9','iso8859-10','iso8859-13','iso8859-14','iso8859-15','johab','koi8-r','koi8-u','mac-cyrillic','mac-greek','mac-iceland','mac-latin2','mac-roman','mac-turkish','ptcp154','shift-jis','shift-jis-2004','shift-jisx0213','utf-16','utf-16-be','utf-16-le','utf-7','utf-8']
 irccolour = ['#FFFFFF','#000000','#0000FF','#00FF00','#FF0000','#F08000','#8000FF','#FFF000','#FFFF00','#80FF00','#00FF80','#00FFFF','#0080FF','#FF80FF','#808080','#A0A0A0']
@@ -219,10 +216,10 @@ class Connect_Registered_Users_Command(xmpp.commands.Command_Handler_Prototype):
         """Build the reply to complete the request"""
         if request.getFrom().getStripped() in config.admins:
             for each in userfile.keys():
-                connection.send(Presence(to=each, frm = config.jid, typ = 'probe'))
+                conn.send(Presence(to=each, frm = config.jid, typ = 'probe'))
                 if userfile[each].has_key('servers'):
                     for server in userfile[each]['servers']:
-                        connection.send(Presence(to=each, frm = '%s@%s'%(server,config.jid), typ = 'probe'))
+                        conn.send(Presence(to=each, frm = '%s@%s'%(server,config.jid), typ = 'probe'))
             reply = request.buildReply('result')
             form = DataForm(typ='result',data=[DataField(value='Command completed.',typ='fixed')])
             reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
@@ -487,8 +484,6 @@ class Transport:
         self.jabber.RegisterHandler('presence',self.xmpp_presence)
         #Disco stuff now done by disco object
         self.jabber.RegisterHandler('iq',self.xmpp_iq_version,typ = 'get', ns=NS_VERSION)
-        self.jabber.RegisterHandler('iq',self.xmpp_iq_agents,typ = 'get', ns=NS_AGENTS)
-        self.jabber.RegisterHandler('iq',self.xmpp_iq_browse,typ = 'get', ns=NS_BROWSE)
         self.jabber.RegisterHandler('iq',self.xmpp_iq_mucadmin_set,typ = 'set', ns=NS_MUC_ADMIN)
         self.jabber.RegisterHandler('iq',self.xmpp_iq_mucadmin_get,typ = 'get', ns=NS_MUC_ADMIN)
         self.jabber.RegisterHandler('iq',self.xmpp_iq_mucowner_set,typ = 'set', ns=NS_MUC_OWNER)
@@ -1001,23 +996,6 @@ class Transport:
         conn.pendingoperations["whois:" + irc_ulower(nick)] = m
         conn.whois([(nick + ' ' + nick).encode(conn.charset)])
 
-        raise xmpp.NodeProcessed
-
-    def xmpp_iq_agents(self, con, event):
-        m = Iq(to=event.getFrom(), frm=event.getTo(), typ='result', payload=[Node('agent', attrs={'jid':config.jid},payload=[Node('service',payload='irc'),Node('name',payload=config.discoName),Node('groupchat')])])
-        m.setID(event.getID())
-        self.jabber.send(m)
-        raise xmpp.NodeProcessed
-
-    def xmpp_iq_browse(self, con, event):
-        m = event.buildReply('result')
-        if event.getTo() == config.jid:
-            m.setTagAttr('query','catagory','conference')
-            m.setTagAttr('query','name',config.discoName)
-            m.setTagAttr('query','type','irc')
-            m.setTagAttr('query','jid','config.jid')
-            m.setPayload([Node('ns',payload=NS_MUC),Node('ns',payload=NS_REGISTER)])
-        self.jabber.send(m)
         raise xmpp.NodeProcessed
 
     def xmpp_iq_version(self, con, event):
