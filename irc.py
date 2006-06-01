@@ -592,6 +592,7 @@ class Transport:
                     elif len(nodeinfo) == 2:
                         fromjid = nodeinfo[1]
                         list = [
+                            {'name':fromjid + ' JID','jid':fromjid},
                             {'node':'/'.join([NODE_ADMIN_REGISTERED_USERS, fromjid, NODE_ADMIN_SERVERS]),'name':fromjid + ' Registered Servers','jid':config.jid}]
                     elif len(nodeinfo) == 3:
                         fromstripped = nodeinfo[1].encode('utf8')
@@ -621,6 +622,7 @@ class Transport:
                     elif len(nodeinfo) == 2:
                         fromjid = nodeinfo[1]
                         list = [
+                            {'name':fromjid + ' JID','jid':fromjid},
                             {'node':'/'.join([NODE_ADMIN_ONLINE_USERS, fromjid, NODE_ADMIN_SERVERS]),'name':fromjid + ' Online Servers','jid':config.jid}]
                     elif len(nodeinfo) == 3:
                         fromjid = nodeinfo[1]
