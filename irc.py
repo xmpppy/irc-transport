@@ -2334,10 +2334,10 @@ if __name__ == '__main__':
         pidfile.close()
 
     if config.saslUsername:
-        component = 1
+        sasl = 1
     else:
         config.saslUsername = config.jid
-        component = 0
+        sasl = 0
 
     userfile = shelve.open(config.spoolFile)
     logfile = None
@@ -2345,7 +2345,7 @@ if __name__ == '__main__':
         logfile = open(config.debugFile,'a')
 
     ircobj = irclib.IRC(fn_to_add_socket=irc_add_conn,fn_to_remove_socket=irc_del_conn)
-    connection = xmpp.client.Component(config.jid,config.port,component=component)
+    connection = xmpp.client.Component(config.jid,config.port,sasl=sasl,bind=config.useComponentBinding,route=config.useRouteWrap)
     transport = Transport(connection,ircobj)
     if not transport.xmpp_connect():
         print "Could not connect to server, or password mismatch!"
