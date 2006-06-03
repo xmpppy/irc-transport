@@ -222,7 +222,7 @@ class Connect_Registered_Users_Command(xmpp.commands.Command_Handler_Prototype):
                         conn.send(Presence(to=each, frm = '%s@%s'%(server,config.jid), typ = 'probe'))
             reply = request.buildReply('result')
             form = DataForm(typ='result',data=[DataField(value='Command completed.',typ='fixed')])
-            reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
+            reply.addChild(name='command',namespace=NS_COMMAND,attrs={'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
             self._owner.send(reply)
         else:
             self._owner.send(Error(request,ERR_FORBIDDEN))
@@ -272,7 +272,7 @@ class Connect_Server_Command(xmpp.commands.Command_Handler_Prototype):
                 self.transport.xmpp_presence_do_update(Presence(),server,frm.getStripped())
                 reply = event.buildReply('result')
                 form = DataForm(typ='result',data=[DataField(value='Command completed.',typ='fixed')])
-                reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':event.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
+                reply.addChild(name='command',namespace=NS_COMMAND,attrs={'node':event.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
                 self._owner.send(reply)
                 raise NodeProcessed
             else:
@@ -326,7 +326,7 @@ class Disconnect_Server_Command(xmpp.commands.Command_Handler_Prototype):
                 self.transport.xmpp_presence_do_update(None,server,frm.getStripped())
                 reply = event.buildReply('result')
                 form = DataForm(typ='result',data=[DataField(value='Command completed.',typ='fixed')])
-                reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':event.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
+                reply.addChild(name='command',namespace=NS_COMMAND,attrs={'node':event.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
                 self._owner.send(reply)
                 raise NodeProcessed
             else:
@@ -383,7 +383,7 @@ class Message_Of_The_Day(xmpp.commands.Command_Handler_Prototype):
                 self.transport.users[fromjid][server].motd()
                 reply = event.buildReply('result')
                 form = DataForm(typ='result',data=[DataField(value='Command completed.',typ='fixed')])
-                reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':event.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
+                reply.addChild(name='command',namespace=NS_COMMAND,attrs={'node':event.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
                 self._owner.send(reply)
                 raise NodeProcessed
             else:

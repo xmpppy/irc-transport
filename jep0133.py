@@ -52,7 +52,7 @@ class Online_Users_Command(xmpp.commands.Command_Handler_Prototype):
         if request.getFrom().getStripped() in config.admins:
             reply = request.buildReply('result')
             form = DataForm(typ='result',data=[DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='The list of online users',name='onlineuserjids',value=self.users.keys(),typ='jid-multi')])
-            reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
+            reply.addChild(name='command',namespace=NS_COMMAND,attrs={'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
             self._owner.send(reply)
         else:
             self._owner.send(Error(request,ERR_FORBIDDEN))
@@ -83,7 +83,7 @@ class Active_Users_Command(xmpp.commands.Command_Handler_Prototype):
         if request.getFrom().getStripped() in config.admins:
             reply = request.buildReply('result')
             form = DataForm(typ='result',data=[DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='The list of active users',name='activeuserjids',value=self.users.keys(),typ='jid-multi')])
-            reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
+            reply.addChild(name='command',namespace=NS_COMMAND,attrs={'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
             self._owner.send(reply)
         else:
             self._owner.send(Error(request,ERR_FORBIDDEN))
@@ -114,7 +114,7 @@ class Registered_Users_Command(xmpp.commands.Command_Handler_Prototype):
         if request.getFrom().getStripped() in config.admins:
             reply = request.buildReply('result')
             form = DataForm(typ='result',data=[DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='The list of registered users',name='registereduserjids',value=self.userfile.keys(),typ='jid-multi')])
-            reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
+            reply.addChild(name='command',namespace=NS_COMMAND,attrs={'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
             self._owner.send(reply)
         else:
             self._owner.send(Error(request,ERR_FORBIDDEN))
@@ -150,7 +150,7 @@ class Edit_Admin_List_Command(xmpp.commands.Command_Handler_Prototype):
            reply = request.buildReply('result')
            form = DataForm(title='Editing the Admin List',data=['Fill out this form to edit the list of entities who have administrative privileges', DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='The Admin List', typ='jid-multi', name='adminjids',value=config.admins)])
            replypayload = [Node('actions',attrs={'execute':'next'},payload=[Node('next')]),form]
-           reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':session,'status':'executing'},payload=replypayload)
+           reply.addChild(name='command',namespace=NS_COMMAND,attrs={'node':request.getTagAttr('command','node'),'sessionid':session,'status':'executing'},payload=replypayload)
            self._owner.send(reply)
         else:
            self._owner.send(Error(request,ERR_FORBIDDEN))
@@ -179,7 +179,7 @@ class Edit_Admin_List_Command(xmpp.commands.Command_Handler_Prototype):
                     admins.appendChild(el)
                 txt = doc.createTextNode('\n    ')
                 admins.appendChild(txt)
-                attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':session,'status':'completed'}
+                attrs={'node':request.getTagAttr('command','node'),'sessionid':session,'status':'completed'}
                 payload=[]
                 try:
                     f = open(config.configFile,'w')
@@ -191,7 +191,7 @@ class Edit_Admin_List_Command(xmpp.commands.Command_Handler_Prototype):
                     payload.append(form)
                 doc.unlink()
                 reply = request.buildReply('result')
-                reply.addChild(name='command',attrs=attrs,payload=payload)
+                reply.addChild(name='command',namespace=NS_COMMAND,attrs=attrs,payload=payload)
                 self._owner.send(reply)
             else:
                 self._owner.send(Error(request,ERR_BAD_REQUEST))
@@ -204,7 +204,7 @@ class Edit_Admin_List_Command(xmpp.commands.Command_Handler_Prototype):
         if self.sessions.has_key(session):
             del self.sessions[session]
             reply = request.buildReply('result')
-            reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':session,'status':'canceled'})
+            reply.addChild(name='command',namespace=NS_COMMAND,attrs={'node':request.getTagAttr('command','node'),'sessionid':session,'status':'canceled'})
             self._owner.send(reply)
         else:
             self._owner.send(Error(request,ERR_BAD_REQUEST))
@@ -240,7 +240,7 @@ class Restart_Service_Command(xmpp.commands.Command_Handler_Prototype):
            reply = request.buildReply('result')
            form = DataForm(title='Restarting the Service',data=['Fill out this form to restart the service', DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='Announcement', typ='text-multi', name='announcement')])
            replypayload = [Node('actions',attrs={'execute':'next'},payload=[Node('next')]),form]
-           reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':session,'status':'executing'},payload=replypayload)
+           reply.addChild(name='command',namespace=NS_COMMAND,attrs={'node':request.getTagAttr('command','node'),'sessionid':session,'status':'executing'},payload=replypayload)
            self._owner.send(reply)
         else:
            self._owner.send(Error(request,ERR_FORBIDDEN))
@@ -256,7 +256,7 @@ class Restart_Service_Command(xmpp.commands.Command_Handler_Prototype):
                 self.transport.restart = 1
                 self.transport.online = 0
                 reply = request.buildReply('result')
-                reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':session,'status':'completed'})
+                reply.addChild(name='command',namespace=NS_COMMAND,attrs={'node':request.getTagAttr('command','node'),'sessionid':session,'status':'completed'})
                 self._owner.send(reply)
             else:
                 self._owner.send(Error(request,ERR_BAD_REQUEST))
@@ -269,7 +269,7 @@ class Restart_Service_Command(xmpp.commands.Command_Handler_Prototype):
         if self.sessions.has_key(session):
             del self.sessions[session]
             reply = request.buildReply('result')
-            reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':session,'status':'canceled'})
+            reply.addChild(name='command',namespace=NS_COMMAND,attrs={'node':request.getTagAttr('command','node'),'sessionid':session,'status':'canceled'})
             self._owner.send(reply)
         else:
             self._owner.send(Error(request,ERR_BAD_REQUEST))
@@ -304,7 +304,7 @@ class Shutdown_Service_Command(xmpp.commands.Command_Handler_Prototype):
            reply = request.buildReply('result')
            form = DataForm(title='Shutting Down the Service',data=['Fill out this form to shut down the service', DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='Announcement', typ='text-multi', name='announcement')])
            replypayload = [Node('actions',attrs={'execute':'next'},payload=[Node('next')]),form]
-           reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':session,'status':'executing'},payload=replypayload)
+           reply.addChild(name='command',namespace=NS_COMMAND,attrs={'node':request.getTagAttr('command','node'),'sessionid':session,'status':'executing'},payload=replypayload)
            self._owner.send(reply)
         else:
            self._owner.send(Error(request,ERR_FORBIDDEN))
@@ -319,7 +319,7 @@ class Shutdown_Service_Command(xmpp.commands.Command_Handler_Prototype):
                 self.transport.offlinemsg = '\n'.join(form.getField('announcement').getValues())
                 self.transport.online = 0
                 reply = request.buildReply('result')
-                reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':session,'status':'completed'})
+                reply.addChild(name='command',namespace=NS_COMMAND,attrs={'node':request.getTagAttr('command','node'),'sessionid':session,'status':'completed'})
                 self._owner.send(reply)
             else:
                 self._owner.send(Error(request,ERR_BAD_REQUEST))
@@ -332,7 +332,7 @@ class Shutdown_Service_Command(xmpp.commands.Command_Handler_Prototype):
         if self.sessions.has_key(session):
             del self.sessions[session]
             reply = request.buildReply('result')
-            reply.addChild(name='command',attrs={'xmlns':NS_COMMAND,'node':request.getTagAttr('command','node'),'sessionid':session,'status':'canceled'})
+            reply.addChild(name='command',namespace=NS_COMMAND,attrs={'node':request.getTagAttr('command','node'),'sessionid':session,'status':'canceled'})
             self._owner.send(reply)
         else:
             self._owner.send(Error(request,ERR_BAD_REQUEST))
