@@ -468,6 +468,7 @@ class Transport:
         self.irc.add_global_handler('featurelist',self.irc_featurelist)
         self.irc.add_global_handler('ison',self.irc_ison)
         self.irc.add_global_handler('welcome',self.irc_welcome)
+        self.irc.add_global_handler('disconnect',self.irc_disconnected)
         self.irc.add_global_handler('600',self.irc_watchonline)
         self.irc.add_global_handler('604',self.irc_watchonline)
         self.irc.add_global_handler('601',self.irc_watchoffline)
@@ -1451,6 +1452,10 @@ class Transport:
         if inuse == False:
             self.irc_doquit(conn,message)
 
+    def irc_disconnected(self,conn,event):
+        #print "disconnected by %s" % conn.address
+        self.irc_doquit(conn)
+
     def irc_settopic(self,conn,channel,line):
         try:
             conn.topic(channel.encode(conn.charset),line.encode(conn.charset))
@@ -2184,7 +2189,7 @@ class Transport:
             userhost = unicode(irclib.nm_to_uh(nickmask),conn.charset,'replace')
             try:
                 host = unicode(irclib.nm_to_h(nickmask),conn.charset,'replace')
-                serverprefix,serverdomain = conn.address.split('.', 1)
+                serverprefix,serverdomain = conn.get_server_name().split('.', 1)
                 #irc.zanet.net:     NickServ!services@zanet.net
                 #irc.lagnet.org.za: NickServ!services@lagnet.org.za
                 #irc.zanet.org.za:  NickServ!NickServ@zanet.org.za
@@ -2362,7 +2367,7 @@ if __name__ == '__main__':
                 user = transport.users[userkey]
                 for serverkey, server in user.items():
                     if server._get_socket() == None:
-                        print "disconnected by %s" % server.get_server_name()
+                        #print "disconnected by %s" % server.address
                         transport.irc_doquit(server)
             for each in socketlist.keys():
                 try:
