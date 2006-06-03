@@ -251,6 +251,7 @@ class Connect_Server_Command(xmpp.commands.Command_Handler_Prototype):
         except ValueError:
             channel=''
             server=room
+            sys.exc_clear()
         if channel == '' and (not self.transport.users.has_key(fromjid) or not self.transport.users[fromjid].has_key(server)):
             return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,event,type)
         else:
@@ -267,6 +268,7 @@ class Connect_Server_Command(xmpp.commands.Command_Handler_Prototype):
         except ValueError:
             channel=''
             server=room
+            sys.exc_clear()
         if channel == '':
             if self.transport.irc_connect('',server,'','',frm,Presence()):
                 self.transport.xmpp_presence_do_update(Presence(),server,frm.getStripped())
@@ -305,6 +307,7 @@ class Disconnect_Server_Command(xmpp.commands.Command_Handler_Prototype):
         except ValueError:
             channel=''
             server=room
+            sys.exc_clear()
         if channel == '' and self.transport.users.has_key(fromjid) and self.transport.users[fromjid].has_key(server):
             return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,event,type)
         else:
@@ -321,6 +324,7 @@ class Disconnect_Server_Command(xmpp.commands.Command_Handler_Prototype):
         except ValueError:
             channel=''
             server=room
+            sys.exc_clear()
         if channel == '':
             if self.transport.irc_disconnect('',server,frm,None):
                 self.transport.xmpp_presence_do_update(None,server,frm.getStripped())
@@ -359,6 +363,7 @@ class Message_Of_The_Day(xmpp.commands.Command_Handler_Prototype):
         except ValueError:
             channel=''
             server=room
+            sys.exc_clear()
         if channel == '' and self.transport.users.has_key(fromjid) and self.transport.users[fromjid].has_key(server):
             return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,event,type)
         else:
@@ -375,6 +380,7 @@ class Message_Of_The_Day(xmpp.commands.Command_Handler_Prototype):
         except ValueError:
             channel=''
             server=room
+            sys.exc_clear()
         if channel == '':
             if self.transport.users.has_key(fromjid) \
               and self.transport.users[fromjid].has_key(server):
@@ -532,6 +538,7 @@ class Transport:
         except ValueError:
             channel=''
             server=room
+            sys.exc_clear()
         #Type is either 'info' or 'items'
         if to == config.jid:
             if node == None:
@@ -714,11 +721,13 @@ class Transport:
         except ValueError:
             channel=''
             server=room
+            sys.exc_clear()
         x = event.getTag(name='x', namespace=NS_MUC)
         try:
             password = x.getTagData('password')
         except AttributeError:
             password = None
+            sys.exc_clear()
         if to == config.jid or channel == '':
             conf = None
             if userfile.has_key(fromstripped):
@@ -892,13 +901,14 @@ class Transport:
             if event.getSubject.strip() == '':
                 event.setSubject(None)
         except AttributeError:
-            pass
+            sys.exc_clear()
         try:
             channel, server = room.split('%',1)
             channel = JIDDecode(channel)
         except ValueError:
             channel=''
             server=room
+            sys.exc_clear()
         if not self.users.has_key(fromjid):
             self.jabber.send(Error(event,ERR_REGISTRATION_REQUIRED))         # another candidate: ERR_SUBSCRIPTION_REQUIRED
             return
@@ -977,6 +987,7 @@ class Transport:
         except ValueError:
             channel=''
             server=room
+            sys.exc_clear()
         if not self.users.has_key(fromjid):
             self.jabber.send(Error(event,ERR_REGISTRATION_REQUIRED))         # another candidate: ERR_SUBSCRIPTION_REQUIRED
             raise xmpp.NodeProcessed
@@ -1243,6 +1254,7 @@ class Transport:
         except ValueError:
             channel=''
             server=room
+            sys.exc_clear()
         if not channel == '':
             self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
             raise xmpp.NodeProcessed
@@ -1296,6 +1308,7 @@ class Transport:
         except ValueError:
             channel=''
             server=room
+            sys.exc_clear()
         if not channel == '':
             self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
             raise xmpp.NodeProcessed
@@ -1757,6 +1770,7 @@ class Transport:
                 except ValueError:
                     key = feature
                     value = None
+                    sys.exc_clear()
                 conn.features[key] = value
         #print 'features:%s'%repr(conn.features)
 
@@ -2129,6 +2143,7 @@ class Transport:
             nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
         except:
             nick = conn.server
+            sys.exc_clear()
         line,xhtml = colourparse(event.arguments()[0],conn.charset)
         if line[-3:] == ' - ': line = line[:-3]
         if line[:2] == '- ': line = line[2:]
@@ -2163,6 +2178,7 @@ class Transport:
             nick = unicode(irclib.nm_to_n(nickmask),conn.charset,'replace')
         except:
             nick = conn.server
+            sys.exc_clear()
         if conn.activechats.has_key(irc_ulower(nick)):
             chat = conn.activechats[irc_ulower(nick)] # irc jid, xmpp jid, last message time, capabilites
             if chat[2] + 300 > time.time():
@@ -2175,6 +2191,7 @@ class Transport:
             except ValueError:
                 channel=''
                 server=room
+                sys.exc_clear()
 
             if conn.channels.has_key(channel):
                 resources = conn.channels[channel].resources
@@ -2199,9 +2216,10 @@ class Transport:
                 #irc.freenode.net:  NickServ!NickServ@services.
                 if host == 'services.': userhost=''
             except:
-                pass
+                sys.exc_clear()
         except:
             userhost = ''
+            sys.exc_clear()
         if userhost:
             frm = '%s%%%s@%s' %(nick,conn.server,config.jid)
         else:
@@ -2374,6 +2392,7 @@ if __name__ == '__main__':
                     (ci, co, ce) = select.select([],[],[each],0)
                 except socket.error:
                     irc_del_conn(each)
+            sys.exc_clear()
             (i , o, e) = select.select(socketlist.keys(),[],[],1)
         for each in i:
             if socketlist[each] == 'xmpp':
@@ -2381,6 +2400,7 @@ if __name__ == '__main__':
                     connection.Process(1)
                 except IOError:
                     transport.xmpp_disconnect()
+                    sys.exc_clear()
                 except:
                     logError()
                 if not connection.isConnected(): transport.xmpp_disconnect(connection)
