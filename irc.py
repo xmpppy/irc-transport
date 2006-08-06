@@ -603,7 +603,8 @@ class Transport:
                             {'name':fromjid + ' JID','jid':fromjid},
                             {'node':'/'.join([NODE_ADMIN_REGISTERED_USERS, fromjid, NODE_ADMIN_SERVERS]),'name':fromjid + ' Registered Servers','jid':config.jid}]
                     elif len(nodeinfo) == 3:
-                        fromstripped = nodeinfo[1].encode('utf8')
+                        fromjid = nodeinfo[1]
+                        fromstripped = fromjid.encode('utf8')
                         node = nodeinfo[2]
                         if node == NODE_ADMIN_SERVERS:
                             servers = []
