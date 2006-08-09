@@ -526,7 +526,7 @@ class Transport:
         self.disco.setDiscoHandler(self.xmpp_base_disco,node='',jid='')
 
     # New Disco Handlers
-    def xmpp_base_disco(self, conn, event, type):
+    def xmpp_base_disco(self, con, event, type):
         fromjid = event.getFrom().getStripped().__str__()
         fromstripped = event.getFrom().getStripped().encode('utf8')
         to = event.getTo()
@@ -706,7 +706,7 @@ class Transport:
             raise NodeProcessed
 
     #XMPP Handlers
-    def xmpp_presence(self, conn, event):
+    def xmpp_presence(self, con, event):
         # Add ACL support
         fromjid = event.getFrom()
         fromstripped = fromjid.getStripped().encode('utf8')
@@ -834,7 +834,8 @@ class Transport:
                     if self.users.has_key(fromjid.getStripped()) \
                       and self.users[fromjid.getStripped()].has_key(server) \
                       and self.users[fromjid.getStripped()][server].features.has_key('WATCH'):
-                        self.users[fromjid.getStripped()][server].send_raw('WATCH +%s' % nick.encode(conn.charset,'replace'))
+                        conn = self.users[fromjid.getStripped()][server]
+                        conn.send_raw('WATCH +%s' % nick.encode(conn.charset,'replace'))
             elif type == 'unsubscribe' or type == 'unsubscribed':
                 self.jabber.send(Presence(to=fromjid, frm = to, typ = 'unsubscribed'))
                 if nick in subscriptions:
@@ -842,7 +843,8 @@ class Transport:
                     if self.users.has_key(fromjid.getStripped()) \
                       and self.users[fromjid.getStripped()].has_key(server) \
                       and self.users[fromjid.getStripped()][server].features.has_key('WATCH'):
-                        self.users[fromjid.getStripped()][server].send_raw('WATCH -%s' % nick.encode(conn.charset,'replace'))
+                        conn = self.users[fromjid.getStripped()][server]
+                        conn.send_raw('WATCH -%s' % nick.encode(conn.charset,'replace'))
 
             conf['subscriptions'] = subscriptions
             user = userfile[fromstripped]
@@ -898,7 +900,7 @@ class Transport:
                     conn.away = show
                     conn.send_raw('AWAY :%s'%show.encode(conn.charset,'replace'))
 
-    def xmpp_message(self, conn, event):
+    def xmpp_message(self, con, event):
         type = event.getType()
         fromjid = event.getFrom().getStripped().__str__()
         to = event.getTo()
@@ -983,7 +985,7 @@ class Transport:
             else:
                 self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))
 
-    def xmpp_iq_vcard(self, conn, event):
+    def xmpp_iq_vcard(self, con, event):
         fromjid = event.getFrom().getStripped()
         to = event.getTo()
         room = irc_ulower(to.getNode())
@@ -1020,7 +1022,7 @@ class Transport:
 
         raise xmpp.NodeProcessed
 
-    def xmpp_iq_version(self, conn, event):
+    def xmpp_iq_version(self, con, event):
         # TODO: maybe real version requests via irc? - or maybe via ad hoc?
         fromjid = event.getFrom()
         to = event.getTo()
@@ -1031,7 +1033,7 @@ class Transport:
         self.jabber.send(m)
         raise xmpp.NodeProcessed
 
-    def xmpp_iq_mucadmin_get(self, conn, event):
+    def xmpp_iq_mucadmin_get(self, con, event):
         fromjid = event.getFrom().getStripped()
         to = event.getTo()
         room = irc_ulower(to.getNode())
@@ -1076,7 +1078,7 @@ class Transport:
         self.jabber.send(m)
         raise xmpp.NodeProcessed
 
-    def xmpp_iq_mucadmin_set(self, conn, event):
+    def xmpp_iq_mucadmin_set(self, con, event):
         fromjid = event.getFrom().getStripped()
         to = event.getTo()
         room = irc_ulower(to.getNode())
@@ -1127,7 +1129,7 @@ class Transport:
                         conn.mode(channel,'%s %s'%('-o',nick))
                         raise xmpp.NodeProcessed
 
-    def xmpp_iq_mucowner_get(self, conn, event):
+    def xmpp_iq_mucowner_get(self, con, event):
         fromjid = event.getFrom().getStripped()
         to = event.getTo()
         room = irc_ulower(to.getNode())
@@ -1171,7 +1173,7 @@ class Transport:
         self.jabber.send(m)
         raise xmpp.NodeProcessed
 
-    def xmpp_iq_mucowner_set(self, conn, event):
+    def xmpp_iq_mucowner_set(self, con, event):
         fromjid = event.getFrom().getStripped()
         to = event.getTo()
         room = irc_ulower(to.getNode())
@@ -1251,7 +1253,7 @@ class Transport:
         raise xmpp.NodeProcessed
 
     # Registration code
-    def xmpp_iq_register_get(self, conn, event):
+    def xmpp_iq_register_get(self, con, event):
         charset = config.charset
         fromjid = event.getFrom().getStripped().encode('utf8')
         to = event.getTo()
@@ -1303,7 +1305,7 @@ class Transport:
         self.jabber.send(m)
         raise xmpp.NodeProcessed
 
-    def xmpp_iq_register_set(self, conn, event):
+    def xmpp_iq_register_set(self, con, event):
         remove = False
 
         fromjid = event.getFrom().getStripped().encode('utf8')
