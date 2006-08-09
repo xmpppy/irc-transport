@@ -962,7 +962,9 @@ class Transport:
             else:
                 self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))  # or MALFORMED_JID maybe?
         elif type in ['chat', None]:
-            if nick:
+            if nick == to.getResource():
+                conn.send_raw('%s %s' % (nick.upper(),event.getBody()))
+            elif nick:
                 if conn.activechats.has_key(irc_ulower(nick)):
                     conn.activechats[irc_ulower(nick)] = [to,event.getFrom(),time.time(),conn.activechats[irc_ulower(nick)][3]]
                 else:
@@ -2087,57 +2089,76 @@ class Transport:
 
     def irc_whoisgetvcard(self,conn,event):
         nick = irc_ulower(unicode(event.arguments()[0],conn.charset,'replace'))
-        m = conn.pendingoperations["whois:" + nick]
-        return m.getTag('vCard', namespace=NS_VCARD)
+        key = "whois:" + nick
+        if conn.pendingoperations.has_key(key):
+            m = conn.pendingoperations[key]
+            return m.getTag('vCard', namespace=NS_VCARD)
+        else:
+            self.irc_rawtext(conn,'whois',event,' '.join(event.arguments()[1:]))
 
     def irc_whoisuser(self,conn,event):
         p = self.irc_whoisgetvcard(conn,event)
-        p.setTagData(tag='FN', val=unicode(event.arguments()[4],conn.charset,'replace'))
-        p.setTagData(tag='NICKNAME', val=unicode(event.arguments()[0],conn.charset,'replace'))
-        e = p.addChild(name='EMAIL')
-        e.setTagData(tag='USERID', val=unicode(event.arguments()[1],conn.charset,'replace') + '@' + unicode(event.arguments()[2],conn.charset,'replace'))
+        if p:
+            p.setTagData(tag='FN', val=unicode(event.arguments()[4],conn.charset,'replace'))
+            p.setTagData(tag='NICKNAME', val=unicode(event.arguments()[0],conn.charset,'replace'))
+            e = p.addChild(name='EMAIL')
+            e.setTagData(tag='USERID', val=unicode(event.arguments()[1],conn.charset,'replace') + '@' + unicode(event.arguments()[2],conn.charset,'replace'))
 
     def irc_whoisserver(self,conn,event):
         p = self.irc_whoisgetvcard(conn,event)
-        o = p.addChild(name='ORG')
-        o.setTagData(tag='ORGUNIT', val=unicode(event.arguments()[1],conn.charset,'replace'))
-        o.setTagData(tag='ORGNAME', val=unicode(event.arguments()[2],conn.charset,'replace'))
+        if p:
+            o = p.addChild(name='ORG')
+            o.setTagData(tag='ORGUNIT', val=unicode(event.arguments()[1],conn.charset,'replace'))
+            o.setTagData(tag='ORGNAME', val=unicode(event.arguments()[2],conn.charset,'replace'))
 
     def irc_whoisoperator(self,conn,event):
         p = self.irc_whoisgetvcard(conn,event)
-        p.setTagData(tag='ROLE', val=unicode(event.arguments()[1],conn.charset,'replace'))
+        if p:
+            p.setTagData(tag='ROLE', val=unicode(event.arguments()[1],conn.charset,'replace'))
 
     def irc_whoisidle(self,conn,event):
         p = self.irc_whoisgetvcard(conn,event)
-        seconds = int(event.arguments()[1])
-        minutes, seconds = divmod(seconds, 60)
-        hours, minutes = divmod(minutes, 60)
-        p.setTagData(tag='DESC', val=p.getTagData(tag='DESC') + '\x0a' + 'Idle: %s hours %s mins %s secs' % (hours, minutes, seconds))
-        if len(event.arguments()) > 3:
-            p.setTagData(tag='DESC', val=p.getTagData(tag='DESC') + '\x0a' + 'Signon Time: ' + time.ctime(float(event.arguments()[2])))
+        if p:
+            seconds = int(event.arguments()[1])
+            minutes, seconds = divmod(seconds, 60)
+            hours, minutes = divmod(minutes, 60)
+            p.setTagData(tag='DESC', val=p.getTagData(tag='DESC') + '\x0a' + 'Idle: %s hours %s mins %s secs' % (hours, minutes, seconds))
+            if len(event.arguments()) > 3:
+                p.setTagData(tag='DESC', val=p.getTagData(tag='DESC') + '\x0a' + 'Signon Time: ' + time.ctime(float(event.arguments()[2])))
 
     def irc_whoischannels(self,conn,event):
         p = self.irc_whoisgetvcard(conn,event)
-        p.setTagData(tag='TITLE', val=unicode(event.arguments()[1],conn.charset,'replace'))
+        if p:
+            p.setTagData(tag='TITLE', val=unicode(event.arguments()[1],conn.charset,'replace'))
 
     def irc_endofwhois(self,conn,event):
         nick = irc_ulower(unicode(event.arguments()[0],conn.charset,'replace'))
-        m = conn.pendingoperations["whois:" + nick]
-        del conn.pendingoperations["whois:" + nick]
-        self.jabber.send(m)
+        key = "whois:" + nick
+        if conn.pendingoperations.has_key(key):
+            m = conn.pendingoperations[key]
+            del conn.pendingoperations[key]
+            self.jabber.send(m)
+        else:
+            self.irc_rawtext(conn,'whois',event,' '.join(event.arguments()[1:]))
 
     def irc_list(self,conn,event):
         chan = event.arguments()[0]
         if irclib.is_channel(chan):
             chan = unicode(chan,conn.charset,'replace')
-            rep = conn.pendingoperations["list"]
-            q=rep.getTag('query')
-            q.addChild('item',{'name':chan,'jid':'%s%%%s@%s' % (JIDEncode(chan), conn.server, config.jid)})
+            if conn.pendingoperations.has_key("list"):
+                rep = conn.pendingoperations["list"]
+                q=rep.getTag('query')
+                q.addChild('item',{'name':chan,'jid':'%s%%%s@%s' % (JIDEncode(chan), conn.server, config.jid)})
+            else:
+                self.irc_rawtext(conn,'list',event,' '.join(event.arguments()))
 
     def irc_listend(self,conn,event):
-        rep = conn.pendingoperations["list"]
-        del conn.pendingoperations["list"]
-        self.jabber.send(rep)
+        if conn.pendingoperations.has_key("list"):
+            rep = conn.pendingoperations["list"]
+            del conn.pendingoperations["list"]
+            self.jabber.send(rep)
+        else:
+            self.irc_rawtext(conn,'list',event,' '.join(event.arguments()))
 
     def irc_motdstart(self,conn,event):
         try:
@@ -2174,6 +2195,12 @@ class Transport:
         #      userfile[conn.fromjid]['servers'][conn.server]['motdhash'] = motdhash
         self.jabber.send(m)
 
+    def irc_rawtext(self,conn,resource,event,msg):
+        frm = '%s@%s/%s' %(conn.server,config.jid,resource)
+        line,xhtml = colourparse(msg,conn.charset)
+        m = Message(to=conn.fromjid,body=line,typ='chat',frm=frm,payload = [xhtml])
+        self.jabber.send(m)
+
     def nm_to_jidinfo(self,conn,nickmask):
         try:
             nick = unicode(irclib.nm_to_n(nickmask),conn.charset,'replace')
@@ -2206,12 +2233,12 @@ class Transport:
         try:
             userhost = unicode(irclib.nm_to_uh(nickmask),conn.charset,'replace')
             try:
-                host = unicode(irclib.nm_to_h(nickmask),conn.charset,'replace')
-                serverprefix,serverdomain = conn.get_server_name().split('.', 1)
+                host = unicode(irclib.nm_to_h(nickmask),conn.charset,'replace').lower()
+                serverprefix,serverdomain = conn.get_server_name().lower().split('.', 1)
                 #irc.zanet.net:     NickServ!services@zanet.net
                 #irc.lagnet.org.za: NickServ!services@lagnet.org.za
                 #irc.zanet.org.za:  NickServ!NickServ@zanet.org.za
-                if host == '%s'%serverdomain: userhost=''
+                if host == serverdomain: userhost=''
                 #irc.oftc.net:      NickServ!services@services.oftc.net
                 if host == 'services.%s'%serverdomain: userhost=''
                 #irc.freenode.net:  NickServ!NickServ@services.
