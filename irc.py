@@ -526,7 +526,7 @@ class Transport:
         self.disco.setDiscoHandler(self.xmpp_base_disco,node='',jid='')
 
     # New Disco Handlers
-    def xmpp_base_disco(self, con, event, type):
+    def xmpp_base_disco(self, conn, event, type):
         fromjid = event.getFrom().getStripped().__str__()
         fromstripped = event.getFrom().getStripped().encode('utf8')
         to = event.getTo()
@@ -571,9 +571,9 @@ class Transport:
                 if type == 'items':
                     list = []
                     servers = []
-                    if userfile.has_key(fromstripped):
-                        if userfile[fromstripped].has_key('servers'):
-                            servers = userfile[fromstripped]['servers']
+                    if userfile.has_key(fromstripped) \
+                      and userfile[fromstripped].has_key('servers'):
+                        servers = userfile[fromstripped]['servers']
                     for each in servers:
                         list.append({'name':each,'jid':'%s@%s' % (each, config.jid)})
                     return list
@@ -608,9 +608,9 @@ class Transport:
                         node = nodeinfo[2]
                         if node == NODE_ADMIN_SERVERS:
                             servers = []
-                            if userfile.has_key(fromstripped):
-                                if userfile[fromstripped].has_key('servers'):
-                                    servers = userfile[fromstripped]['servers']
+                            if userfile.has_key(fromstripped) \
+                              and userfile[fromstripped].has_key('servers'):
+                                servers = userfile[fromstripped]['servers']
                             for each in servers:
                                 address = each
                                 if servers[each]['address']:
@@ -706,7 +706,7 @@ class Transport:
             raise NodeProcessed
 
     #XMPP Handlers
-    def xmpp_presence(self, con, event):
+    def xmpp_presence(self, conn, event):
         # Add ACL support
         fromjid = event.getFrom()
         fromstripped = fromjid.getStripped().encode('utf8')
@@ -734,7 +734,9 @@ class Transport:
             if userfile.has_key(fromstripped):
                 if to == config.jid:
                     conf = userfile[fromstripped]
-                elif server and userfile[fromstripped].has_key('servers') and userfile[fromstripped]['servers'].has_key(server):
+                elif server \
+                  and userfile[fromstripped].has_key('servers') \
+                  and userfile[fromstripped]['servers'].has_key(server):
                     conf = userfile[fromstripped]['servers'][server]
             if not conf:
                 if type != 'unsubscribed' and type != 'error':
@@ -809,7 +811,10 @@ class Transport:
         else:
             nick = channel
             conf = None
-            if server and userfile.has_key(fromstripped) and userfile[fromstripped].has_key('servers') and userfile[fromstripped]['servers'].has_key(server):
+            if server \
+              and userfile.has_key(fromstripped) \
+              and userfile[fromstripped].has_key('servers') \
+              and userfile[fromstripped]['servers'].has_key(server):
                 conf = userfile[fromstripped]['servers'][server]
             if not conf:
                 if type != 'unsubscribed' and type != 'error':
@@ -829,7 +834,7 @@ class Transport:
                     if self.users.has_key(fromjid.getStripped()) \
                       and self.users[fromjid.getStripped()].has_key(server) \
                       and self.users[fromjid.getStripped()][server].features.has_key('WATCH'):
-                        self.users[fromjid.getStripped()][server].send_raw('WATCH +%s' % nick)
+                        self.users[fromjid.getStripped()][server].send_raw('WATCH +%s' % nick.encode(conn.charset,'replace'))
             elif type == 'unsubscribe' or type == 'unsubscribed':
                 self.jabber.send(Presence(to=fromjid, frm = to, typ = 'unsubscribed'))
                 if nick in subscriptions:
@@ -837,7 +842,7 @@ class Transport:
                     if self.users.has_key(fromjid.getStripped()) \
                       and self.users[fromjid.getStripped()].has_key(server) \
                       and self.users[fromjid.getStripped()][server].features.has_key('WATCH'):
-                        self.users[fromjid.getStripped()][server].send_raw('WATCH -%s' % nick)
+                        self.users[fromjid.getStripped()][server].send_raw('WATCH -%s' % nick.encode(conn.charset,'replace'))
 
             conf['subscriptions'] = subscriptions
             user = userfile[fromstripped]
@@ -891,9 +896,9 @@ class Transport:
                     show = event.getStatus()
                 if conn.away != show:
                     conn.away = show
-                    conn.send_raw('AWAY :%s'%show)
+                    conn.send_raw('AWAY :%s'%show.encode(conn.charset,'replace'))
 
-    def xmpp_message(self, con, event):
+    def xmpp_message(self, conn, event):
         type = event.getType()
         fromjid = event.getFrom().getStripped().__str__()
         to = event.getTo()
@@ -963,7 +968,7 @@ class Transport:
                 self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))  # or MALFORMED_JID maybe?
         elif type in ['chat', None]:
             if nick == to.getResource():
-                conn.send_raw('%s %s' % (nick.upper(),event.getBody()))
+                conn.send_raw('%s %s' % (nick.upper().encode(conn.charset,'replace'),event.getBody().encode(conn.charset,'replace')))
             elif nick:
                 if conn.activechats.has_key(irc_ulower(nick)):
                     conn.activechats[irc_ulower(nick)] = [to,event.getFrom(),time.time(),conn.activechats[irc_ulower(nick)][3]]
@@ -978,7 +983,7 @@ class Transport:
             else:
                 self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))
 
-    def xmpp_iq_vcard(self, con, event):
+    def xmpp_iq_vcard(self, conn, event):
         fromjid = event.getFrom().getStripped()
         to = event.getTo()
         room = irc_ulower(to.getNode())
@@ -1011,11 +1016,11 @@ class Transport:
         p.setTagData(tag='DESC', val='Additional Information:')
 
         conn.pendingoperations["whois:" + irc_ulower(nick)] = m
-        conn.whois([(nick + ' ' + nick).encode(conn.charset)])
+        conn.whois([(nick + ' ' + nick).encode(conn.charset,'replace')])
 
         raise xmpp.NodeProcessed
 
-    def xmpp_iq_version(self, con, event):
+    def xmpp_iq_version(self, conn, event):
         # TODO: maybe real version requests via irc? - or maybe via ad hoc?
         fromjid = event.getFrom()
         to = event.getTo()
@@ -1026,7 +1031,7 @@ class Transport:
         self.jabber.send(m)
         raise xmpp.NodeProcessed
 
-    def xmpp_iq_mucadmin_get(self, con, event):
+    def xmpp_iq_mucadmin_get(self, conn, event):
         fromjid = event.getFrom().getStripped()
         to = event.getTo()
         room = irc_ulower(to.getNode())
@@ -1071,7 +1076,7 @@ class Transport:
         self.jabber.send(m)
         raise xmpp.NodeProcessed
 
-    def xmpp_iq_mucadmin_set(self, con, event):
+    def xmpp_iq_mucadmin_set(self, conn, event):
         fromjid = event.getFrom().getStripped()
         to = event.getTo()
         room = irc_ulower(to.getNode())
@@ -1122,7 +1127,7 @@ class Transport:
                         conn.mode(channel,'%s %s'%('-o',nick))
                         raise xmpp.NodeProcessed
 
-    def xmpp_iq_mucowner_get(self, con, event):
+    def xmpp_iq_mucowner_get(self, conn, event):
         fromjid = event.getFrom().getStripped()
         to = event.getTo()
         room = irc_ulower(to.getNode())
@@ -1166,7 +1171,7 @@ class Transport:
         self.jabber.send(m)
         raise xmpp.NodeProcessed
 
-    def xmpp_iq_mucowner_set(self, con, event):
+    def xmpp_iq_mucowner_set(self, conn, event):
         fromjid = event.getFrom().getStripped()
         to = event.getTo()
         room = irc_ulower(to.getNode())
@@ -1246,7 +1251,7 @@ class Transport:
         raise xmpp.NodeProcessed
 
     # Registration code
-    def xmpp_iq_register_get(self, con, event):
+    def xmpp_iq_register_get(self, conn, event):
         charset = config.charset
         fromjid = event.getFrom().getStripped().encode('utf8')
         to = event.getTo()
@@ -1298,7 +1303,7 @@ class Transport:
         self.jabber.send(m)
         raise xmpp.NodeProcessed
 
-    def xmpp_iq_register_set(self, con, event):
+    def xmpp_iq_register_set(self, conn, event):
         remove = False
 
         fromjid = event.getFrom().getStripped().encode('utf8')
@@ -1463,7 +1468,9 @@ class Transport:
             if self.users[conn.fromjid][each].channels != {}:
                 inuse = True
         fromstripped = JID(conn.fromjid).getStripped().encode('utf8')
-        if userfile.has_key(fromstripped) and userfile[fromstripped].has_key('servers') and userfile[fromstripped]['servers'].has_key(conn.server):
+        if userfile.has_key(fromstripped) \
+          and userfile[fromstripped].has_key('servers') \
+          and userfile[fromstripped]['servers'].has_key(conn.server):
             inuse = True
         if inuse == False:
             self.irc_doquit(conn,message)
@@ -1474,7 +1481,7 @@ class Transport:
 
     def irc_settopic(self,conn,channel,line):
         try:
-            conn.topic(channel.encode(conn.charset),line.encode(conn.charset))
+            conn.topic(channel.encode(conn.charset,'replace'),line.encode(conn.charset,'replace'))
         except:
             self.irc_doquit(conn)
 
@@ -1490,7 +1497,7 @@ class Transport:
             #print channel, each
             if each != '' or each == None:
                try:
-                    conn.privmsg(channel.encode(conn.charset),each.encode(conn.charset))
+                    conn.privmsg(channel.encode(conn.charset,'replace'),each.encode(conn.charset,'replace'))
                except:
                     self.irc_doquit(conn)
 
@@ -1499,7 +1506,7 @@ class Transport:
         for each in lines:
             #print channel, each
             try:
-                conn.ctcp(type,channel.encode(conn.charset),each.encode(conn.charset))
+                conn.ctcp(type,channel.encode(conn.charset,'replace'),each.encode(conn.charset,'replace'))
             except:
                 self.irc_doquit(conn)
 
@@ -1518,7 +1525,7 @@ class Transport:
                     self.irc_sendnick(conn,nick)
                 if not conn.channels.has_key(channel):
                     # it's a new channel, just join it
-                    self.irc_newroom(conn,channel,resource)
+                    self.irc_newroom(conn,channel)
                     conn.channels[channel].resources[resource]=(event.getShow(),event.getPriority(),event.getStatus(),time.time())
                     print "New channel login: %s" % conn.channels[channel].resources
                 else:
@@ -1634,7 +1641,7 @@ class Transport:
             self.jabber.send(Error(Presence(to = frm, frm = '%s%%%s@%s/%s' % (channel,server,config.jid,nick)),ERR_SERVICE_UNAVAILABLE,reply=0))  # Other candidates: ERR_GONE, ERR_REMOTE_SERVER_NOT_FOUND, ERR_REMOTE_SERVER_TIMEOUT
             return None
 
-    def irc_newroom(self,conn,channel,resource):
+    def irc_newroom(self,conn,channel):
         try:
            conn.join(channel)
            conn.who(channel)
@@ -1711,7 +1718,7 @@ class Transport:
 
     def irc_leaveroom(self,conn,channel):
         try:
-           conn.part([channel.encode(conn.charset)])
+           conn.part([channel.encode(conn.charset,'replace')])
         except:
             self.irc_doquit(conn)
 
@@ -1778,7 +1785,8 @@ class Transport:
         #print 'features:%s'%repr(conn.features)
 
         fromstripped = conn.fromjid.encode('utf8')
-        if userfile[fromstripped].has_key('servers') \
+        if userfile.has_key(fromstripped) \
+          and userfile[fromstripped].has_key('servers') \
           and userfile[fromstripped]['servers'].has_key(conn.server):
             conf = userfile[fromstripped]['servers'][conn.server]
             if conf.has_key('subscriptions'):
@@ -1787,11 +1795,12 @@ class Transport:
                     if conn.isontimer in timerlist:
                         timerlist.remove(conn.isontimer)
                         for nick in subscriptions:
-                            conn.send_raw('WATCH +%s' % nick)
+                            conn.send_raw('WATCH +%s' % nick.encode(conn.charset,'replace'))
 
     def irc_doison(self,conn):
         fromstripped = conn.fromjid.encode('utf8')
-        if userfile[fromstripped].has_key('servers') \
+        if userfile.has_key(fromstripped) \
+          and userfile[fromstripped].has_key('servers') \
           and userfile[fromstripped]['servers'].has_key(conn.server):
             conf = userfile[fromstripped]['servers'][conn.server]
             if conf.has_key('subscriptions'):
@@ -1840,13 +1849,13 @@ class Transport:
         conn.isontimer=(freq,offset,self.irc_doison,[conn])
         timerlist.append(conn.isontimer)
 
-        if conn.joinchan != '':
-            self.irc_newroom(conn,conn.joinchan,conn.joinresource)
+        if conn.joinchan:
+            self.irc_newroom(conn,conn.joinchan)
         #TODO: channel join operations should become pending operations
         #       so that they can be tracked correctly
         #       and so that we can send errors to the right place
-        del conn.joinchan
-        del conn.joinresource
+        conn.joinchan = None
+        conn.joinresource = None
 
     def irc_nicknameinuse(self,conn,event):
         if conn.joinchan:
@@ -2048,6 +2057,8 @@ class Transport:
         name = '%s%%%s' % (channel, conn.server)
         nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
         jid = '%s%%%s@%s' % (nick, conn.server, config.jid)
+        if not conn.channels.has_key(channel):
+            self.irc_newroom(conn,channel)
         if nick not in conn.channels[channel].members.keys():
             conn.channels[channel].members[nick]={'affiliation':'none','role':'visitor','jid':jid}
         m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, config.jid, nick))
@@ -2301,9 +2312,9 @@ class Transport:
         if event.arguments()[0] == 'ACTION':
             self.irc_privmsg(conn,event,'/me '+event.arguments()[1])
         elif event.arguments()[0] == 'VERSION':
-            conn.ctcp_reply(irclib.nm_to_n(event.source()).encode(conn.charset),'VERSION ' + VERSTR + ' ' + version)
+            conn.ctcp_reply(irclib.nm_to_n(event.source()).encode(conn.charset,'replace'),'VERSION ' + VERSTR + ' ' + version)
         elif event.arguments()[0] == 'CAPABILITIES':
-            conn.ctcp_reply(irclib.nm_to_n(event.source()).encode(conn.charset),'CAPABILITIES version,x:event')
+            conn.ctcp_reply(irclib.nm_to_n(event.source()).encode(conn.charset,'replace'),'CAPABILITIES version,x:event')
         elif event.arguments()[0] == 'X:EVENT':
             frm,to,caps = self.nm_to_jidinfo(conn,event.source())
             m = Message(to=to,frm=frm)
@@ -2354,12 +2365,12 @@ def loadConfig():
     print "Configuration file not found. You need to create a config file and put it in one of these locations:\n    " + "\n    ".join(config.configFiles)
     sys.exit(1)
 
-def irc_add_conn(con):
-    socketlist[con]='irc'
+def irc_add_conn(conn):
+    socketlist[conn]='irc'
 
-def irc_del_conn(con):
-    if socketlist.has_key(con):
-        del socketlist[con]
+def irc_del_conn(conn):
+    if socketlist.has_key(conn):
+        del socketlist[conn]
 
 def logError():
     err = '%s - %s\n'%(time.strftime('%a %d %b %Y %H:%M:%S'),version)
