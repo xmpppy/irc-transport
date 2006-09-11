@@ -76,27 +76,27 @@ def colourparse(str,charset):
                 ctrseq = True
             hs = ''
         elif e == '\x04':
-            print 'Red'
+            if config.dumpProtocol: print 'Red'
         elif e == '\x05':
-            print 'Purple'
+            if config.dumpProtocol: print 'Purple'
         elif e == '\x06':
-            print 'Brown'
+            if config.dumpProtocol: print 'Brown'
         elif e == '\x07':
-            print "Light Grey"
+            if config.dumpProtocol: print "Light Grey"
         elif e == '\x08':
-            print 'Grey'
+            if config.dumpProtocol: print 'Grey'
         elif e == '\x09':
-            print 'Light Blue'
+            if config.dumpProtocol: print 'Light Blue'
         elif e == '\x0a':
-            print 'Light Green'
+            if config.dumpProtocol: print 'Light Green'
         elif e == '\x0b':
-            print 'Light Cyan'
+            if config.dumpProtocol: print 'Light Cyan'
         elif e == '\x0c':
-            print 'Light Red'
+            if config.dumpProtocol: print 'Light Red'
         elif e == '\x0d':
-            print 'Pink'
+            if config.dumpProtocol: print 'Pink'
         elif e == '\x0e':
-            print 'Yellow'
+            if config.dumpProtocol: print 'Yellow'
         elif e == '\x0f':
             #go back to normal
             html.append((hs,foreground,background,bold,underline))
@@ -105,7 +105,7 @@ def colourparse(str,charset):
             bold = None
             underline = None
             hs = ''
-            #print 'White'
+            #if config.dumpProtocol: print 'White'
         elif e == '\x1f':
             html.append((hs,foreground,background,bold,underline))
             if bold == True:
@@ -114,7 +114,7 @@ def colourparse(str,charset):
                 bold = True
             hs = ''
         elif e in ['\x10', '\x11', '\x12', '\x13', '\x14', '\x15', '\x16', '\x17', '\x18', '\x19', '\x1a', '\x1b', '\x1c', '\x1d', '\x1e']:
-            print 'Other Escape'
+            if config.dumpProtocol: print 'Other Escape'
         elif ctrseq == True:
             if e.isdigit():
                 if not ctrfor:
@@ -165,12 +165,12 @@ def colourparse(str,charset):
         html = Node('html')
         html.setNamespace('http://jabber.org/protocol/xhtml-im')
         xhtml = html.addChild('body',namespace='http://www.w3.org/1999/xhtml')
-        #print chtml
+        #if config.dumpProtocol: print chtml
         for each in chtml:
             style = ''
             if each[1] != None and int(each[1])<16:
                 foreground = irccolour[int(each[1])]
-                print foreground
+                if config.dumpProtocol: print foreground
                 style = '%scolor:%s;'%(style,foreground)
             if each[2] != None and int(each[2])<16:
                 background = irccolour[int(each[2])]
@@ -768,12 +768,12 @@ class Transport:
                 #call self.irc_disconnect to disconnect from the server
                 #when you see the user's presence become unavailable
                 if server:
-                    print 'disconnect %s'%repr(server)
+                    if config.dumpProtocol: print 'disconnect %s'%repr(server)
                     self.irc_disconnect('',server,fromjid,status)
                     self.xmpp_presence_do_update(event,server,fromstripped)
                 else:
                     self.jabber.send(Presence(to=fromjid, frm = to, typ = 'unavailable'))
-                    print 'disconnect all'
+                    if config.dumpProtocol: print 'disconnect all'
                     if self.users.has_key(fromjid.getStripped()):
                         for each in self.users[fromjid.getStripped()].keys():
                             self.irc_disconnect('',each,fromjid,status)
@@ -781,7 +781,7 @@ class Transport:
                 #call self.irc_connect to connect to the server
                 #when you see the user's presence become available
                 if server:
-                    print 'connect %s'%repr(server)
+                    if config.dumpProtocol: print 'connect %s'%repr(server)
                     self.irc_connect('',server,nick,password,fromjid,event)
                     self.xmpp_presence_do_update(event,server,fromstripped)
                 else:
@@ -939,29 +939,29 @@ class Transport:
                     self.irc_sendctcp('X:EVENT',conn,nick,','.join(states))
             return
         if type == 'groupchat':
-            print "Groupchat"
+            if config.dumpProtocol: print "Groupchat"
             if irclib.is_channel(channel) and conn.channels.has_key(channel):
-                print "channel:", event.getBody().encode('utf8')
+                if config.dumpProtocol: print "channel:", event.getBody().encode('utf8')
                 if event.getSubject():
-                    print "subject"
+                    if config.dumpProtocol: print "subject"
                     if conn.channels[channel].topic:
-                        print "topic"
+                        if config.dumpProtocol: print "topic"
                         if conn.channels[channel].members[conn.nickname]['role'] == 'moderator':
-                            print "set topic ok"
+                            if config.dumpProtocol: print "set topic ok"
                             self.irc_settopic(conn,channel,event.getSubject())
                         else:
-                            print "set topic forbidden"
+                            if config.dumpProtocol: print "set topic forbidden"
                             self.jabber.send(Error(event,ERR_FORBIDDEN))
                     else:
-                        print "anyone can set topic"
+                        if config.dumpProtocol: print "anyone can set topic"
                         self.irc_settopic(conn,channel,event.getSubject())
                 elif event.getBody() != '':
-                    print "body isn't empty:" , event.getBody().encode('utf8')
+                    if config.dumpProtocol: print "body isn't empty:" , event.getBody().encode('utf8')
                     if event.getBody()[0:3] == '/me':
-                        print "action"
+                        if config.dumpProtocol: print "action"
                         self.irc_sendctcp('ACTION',conn,channel,event.getBody()[4:])
                     else:
-                        print "room message"
+                        if config.dumpProtocol: print "room message"
                         self.irc_sendroom(conn,channel,event.getBody())
                     for resource in conn.channels[channel].resources.keys():
                         t = Message(to='%s/%s'%(fromjid,resource),body=event.getBody(),typ=type,frm='%s@%s/%s' %(room, config.jid,conn.nickname))
@@ -1200,7 +1200,7 @@ class Transport:
         for each in t:
             datafrm = DataForm(node=each).asDict()
             for each in datafrm.keys():
-                print '%s:%s'%(repr(each),repr(datafrm[each]))
+                if config.dumpProtocol: print '%s:%s'%(repr(each),repr(datafrm[each]))
                 fieldValue = False
                 if type(datafrm[each]) in [type(''),type(u'')] and (datafrm[each] == '1' or datafrm[each].lower() == 'true'):
                     fieldValue = True
@@ -1478,7 +1478,7 @@ class Transport:
             self.irc_doquit(conn,message)
 
     def irc_disconnected(self,conn,event):
-        #print "disconnected by %s" % conn.address
+        #if config.dumpProtocol: print "disconnected by %s" % conn.address
         self.irc_doquit(conn)
 
     def irc_settopic(self,conn,channel,line):
@@ -1496,7 +1496,7 @@ class Transport:
     def irc_sendroom(self,conn,channel,line):
         lines = line.split('\x0a')
         for each in lines:
-            #print channel, each
+            #if config.dumpProtocol: print channel, each
             if each != '' or each == None:
                try:
                     conn.privmsg(channel.encode(conn.charset,'replace'),each.encode(conn.charset,'replace'))
@@ -1506,7 +1506,7 @@ class Transport:
     def irc_sendctcp(self,type,conn,channel,line):
         lines = line.split('\x0a')
         for each in lines:
-            #print channel, each
+            #if config.dumpProtocol: print channel, each
             try:
                 conn.ctcp(type,channel.encode(conn.charset,'replace'),each.encode(conn.charset,'replace'))
             except:
@@ -1529,26 +1529,26 @@ class Transport:
                     # it's a new channel, just join it
                     self.irc_newroom(conn,channel)
                     conn.channels[channel].resources[resource]=(event.getShow(),event.getPriority(),event.getStatus(),time.time())
-                    print "New channel login: %s" % conn.channels[channel].resources
+                    if config.dumpProtocol: print "New channel login: %s" % conn.channels[channel].resources
                 else:
                     if conn.channels[channel].resources.has_key(resource):
                         #update resource record
                         conn.channels[channel].resources[resource]=(event.getShow(),event.getPriority(),event.getStatus(),conn.channels[channel].resources[resource][3])
-                        print "Update channel resource login: %s" % conn.channels[channel].resources
+                        if config.dumpProtocol: print "Update channel resource login: %s" % conn.channels[channel].resources
                     else:
                         #new resource login
                         conn.channels[channel].resources[resource]=(event.getShow(),event.getPriority(),event.getStatus(),time.time())
-                        print "New channel resource login: %s" % conn.channels[channel].resources
+                        if config.dumpProtocol: print "New channel resource login: %s" % conn.channels[channel].resources
                         # resource is joining an existing resource on the same channel
                         # TODO: Send topic to new resource
                         # TODO: Alert existing resources that a new resource has joined
                         name = '%s%%%s@%s' % (channel, server, config.jid)
                         for cnick in conn.channels[channel].members.keys():
                             if cnick == conn.nickname:
-                                #print 'nnick %s %s %s'%(name,cnick,nick)
+                                #if config.dumpProtocol: print 'nnick %s %s %s'%(name,cnick,nick)
                                 m = Presence(to=conn.fromjid,frm='%s/%s' %(name, nick))
                             else:
-                                #print 'cnick %s %s %s'%(name,cnick,nick)
+                                #if config.dumpProtocol: print 'cnick %s %s %s'%(name,cnick,nick)
                                 m = Presence(to=conn.fromjid,frm='%s/%s' %(name, cnick))
                             t=m.addChild(name='x',namespace=NS_MUC_USER)
                             p=t.addChild(name='item',attrs=conn.channels[channel].members[cnick])
@@ -1558,11 +1558,11 @@ class Transport:
                 if conn.xresources.has_key(resource):
                     #update resource record
                     conn.xresources[resource]=(event.getShow(),event.getPriority(),event.getStatus(),conn.xresources[resource][3])
-                    print "Update server resource login: %s" % conn.xresources
+                    if config.dumpProtocol: print "Update server resource login: %s" % conn.xresources
                 else:
                     #new resource login
                     conn.xresources[resource]=(event.getShow(),event.getPriority(),event.getStatus(),time.time())
-                    print "New server resource login: %s" % conn.xresources
+                    if config.dumpProtocol: print "New server resource login: %s" % conn.xresources
                     self.jabber.send(Presence(to=frm, frm='%s@%s' % (server, config.jid)))
                     if conn.features.has_key('WATCH'):
                         conn.send_raw('WATCH')
@@ -1683,7 +1683,7 @@ class Transport:
                     if conn.channels.has_key(channel):
                         if conn.channels[channel].resources.has_key(resource):
                             del conn.channels[channel].resources[resource]
-                        print "Deleted channel resource login: %s" % conn.channels[channel].resources
+                        if config.dumpProtocol: print "Deleted channel resource login: %s" % conn.channels[channel].resources
                         if conn.channels[channel].resources == {}:
                             self.irc_leaveroom(conn,channel)
                             del conn.channels[channel]
@@ -1692,9 +1692,9 @@ class Transport:
                 else:
                     if conn.xresources.has_key(resource):
                         del conn.xresources[resource]
-                    print "Deleted server resource login: %s" % conn.xresources
+                    if config.dumpProtocol: print "Deleted server resource login: %s" % conn.xresources
                     if conn.xresources == {}:
-                        print 'No more resource logins'
+                        if config.dumpProtocol: print 'No more resource logins'
                         self.irc_doquit(conn,message)
                     return 1
         return None
@@ -1704,7 +1704,7 @@ class Transport:
         priority = None
         resource = None
         for each in resources.keys():
-            #print each,resources
+            #if config.dumpProtocol: print each,resources
             if resources[each][1]>priority:
                 #if priority is higher then take the highest
                 age = resources[each][3]
@@ -1784,7 +1784,7 @@ class Transport:
                     value = None
                     sys.exc_clear()
                 conn.features[key] = value
-        #print 'features:%s'%repr(conn.features)
+        #if config.dumpProtocol: print 'features:%s'%repr(conn.features)
 
         fromstripped = conn.fromjid.encode('utf8')
         if userfile.has_key(fromstripped) \
@@ -2066,7 +2066,7 @@ class Transport:
         m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, config.jid, nick))
         t=m.addChild(name='x',namespace=NS_MUC_USER)
         p=t.addChild(name='item',attrs=conn.channels[channel].members[nick])
-        #print m.__str__()
+        #if config.dumpProtocol: print m.__str__()
         self.jabber.send(m)
         if config.activityMessages == True:
             for resource in conn.channels[channel].resources.keys():
@@ -2272,7 +2272,7 @@ class Transport:
             type = 'groupchat'
             channel = irc_ulower(unicode(event.target(),conn.charset,'replace'))
             line,xhtml = colourparse(msg,conn.charset)
-            #print (line,xhtml)
+            #if config.dumpProtocol: print (line,xhtml)
             if conn.channels.has_key(channel):
                 nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
                 for resource in conn.channels[channel].resources.keys():
@@ -2341,9 +2341,9 @@ class Transport:
         connected = self.jabber.connect((config.mainServer,config.port))
         if connected:
             self.register_handlers()
-            #print "try auth"
+            #if config.dumpProtocol: print "try auth"
             connected = self.jabber.auth(config.saslUsername,config.secret)
-            #print "auth return",connected
+            #if config.dumpProtocol: print "auth return",connected
         return connected
 
     def xmpp_disconnect(self):
@@ -2409,7 +2409,11 @@ if __name__ == '__main__':
         logfile = open(config.debugFile,'a')
 
     ircobj = irclib.IRC(fn_to_add_socket=irc_add_conn,fn_to_remove_socket=irc_del_conn)
-    connection = xmpp.client.Component(config.jid,config.port,sasl=sasl,bind=config.useComponentBinding,route=config.useRouteWrap)
+    if config.dumpProtocol:
+        debug=['always', 'nodebuilder']
+    else:
+        debug=[]
+    connection = xmpp.client.Component(config.jid,config.port,debug=debug,sasl=sasl,bind=config.useComponentBinding,route=config.useRouteWrap)
     transport = Transport(connection,ircobj)
     if not transport.xmpp_connect():
         print "Could not connect to server, or password mismatch!"
@@ -2426,7 +2430,7 @@ if __name__ == '__main__':
                 user = transport.users[userkey]
                 for serverkey, server in user.items():
                     if server._get_socket() == None:
-                        #print "disconnected by %s" % server.address
+                        #if config.dumpProtocol: print "disconnected by %s" % server.address
                         transport.irc_doquit(server)
             for each in socketlist.keys():
                 try:

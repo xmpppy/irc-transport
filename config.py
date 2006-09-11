@@ -17,6 +17,8 @@ secret = "secret"
 
 allowRegister = False
 
+activityMessages = False # For displaying user acitivity messages
+
 admins = []
 
 useComponentBinding = False
@@ -25,6 +27,6 @@ saslUsername = ""
 
 debugFile = ""
 
-activityMessages = False # For displaying user acitivity messages
+dumpProtocol = False
 
 charset = 'utf-8'
