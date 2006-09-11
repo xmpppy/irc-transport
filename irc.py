@@ -30,9 +30,11 @@ NODE_ONLINE_SERVERS='online-servers'
 NODE_ONLINE_CHANNELS='online-channels'
 NODE_ACTIVE_CHANNELS='active-channels'
 NODE_ADMIN='admin'
+NODE_ADMIN_USERS='users'
 NODE_ADMIN_REGISTERED_USERS='registered-users'
 NODE_ADMIN_ONLINE_USERS='online-users'
-NODE_ADMIN_SERVERS='servers'
+NODE_ADMIN_REGISTERED_SERVERS='registered-servers'
+NODE_ADMIN_ONLINE_SERVERS='online-servers'
 
 ## Unicode Notes
 #
@@ -547,7 +549,7 @@ class Transport:
                         'ids':[
                             {'category':'conference','type':'irc','name':VERSTR},
                             {'category':'gateway','type':'irc','name':VERSTR}],
-                        'features':[NS_REGISTER,NS_VERSION,NS_MUC,NS_COMMANDS]}
+                        'features':[NS_DISCO_INFO,NS_DISCO_ITEMS,NS_REGISTER,NS_VERSION,NS_MUC,NS_COMMANDS]}
                 if type == 'items':
                     list = [
                         {'node':NODE_REGISTERED_SERVERS,'name':config.discoName + ' Registered Servers','jid':config.jid},
@@ -557,7 +559,7 @@ class Transport:
                     return list
             elif node == NODE_ADMIN:
                 if type == 'info':
-                    return {'ids':[],'features':[]}
+                    return {'ids':[],'features':[NS_DISCO_ITEMS]}
                 if type == 'items':
                     if not fromjid in config.admins:
                         return []
@@ -567,7 +569,7 @@ class Transport:
                         {'node':NODE_ADMIN_ONLINE_USERS,'name':config.discoName + ' Online Users','jid':config.jid}]
             elif node == NODE_REGISTERED_SERVERS:
                 if type == 'info':
-                    return {'ids':[],'features':[]}
+                    return {'ids':[],'features':[NS_DISCO_ITEMS]}
                 if type == 'items':
                     list = []
                     servers = []
@@ -579,34 +581,52 @@ class Transport:
                     return list
             elif node == NODE_ONLINE_SERVERS:
                 if type == 'info':
-                    return {'ids':[],'features':[]}
+                    return {'ids':[],'features':[NS_DISCO_ITEMS]}
                 if type == 'items':
                     list = []
                     if self.users.has_key(fromjid):
                         for each in self.users[fromjid].keys():
                             list.append({'name':each,'jid':'%s@%s' % (each, config.jid)})
                     return list
-            elif node.startswith(NODE_ADMIN_REGISTERED_USERS):
+            elif node == NODE_ADMIN_REGISTERED_USERS:
                 if type == 'info':
-                    return {'ids':[],'features':[]}
+                    return {'ids':[],'features':[NS_DISCO_ITEMS]}
+                if type == 'items':
+                    if not fromjid in config.admins:
+                        return []
+                    list = []
+                    for each in userfile.keys():
+                        list.append({'node':'/'.join([NODE_ADMIN_USERS, each]),'name':each,'jid':config.jid})
+                    return list
+            elif node == NODE_ADMIN_ONLINE_USERS:
+                if type == 'info':
+                    return {'ids':[],'features':[NS_DISCO_ITEMS]}
+                if type == 'items':
+                    if not fromjid in config.admins:
+                        return []
+                    list = []
+                    for each in self.users.keys():
+                        list.append({'node':'/'.join([NODE_ADMIN_USERS, each]),'name':each,'jid':config.jid})
+                    return list
+            elif node.startswith(NODE_ADMIN_USERS):
+                if type == 'info':
+                    return {'ids':[],'features':[NS_DISCO_ITEMS]}
                 if type == 'items':
                     if not fromjid in config.admins:
                         return []
                     nodeinfo = node.split('/')
                     list = []
-                    if len(nodeinfo) == 1:
-                        for each in userfile.keys():
-                            list.append({'node':'/'.join([NODE_ADMIN_REGISTERED_USERS, each]),'name':each,'jid':config.jid})
-                    elif len(nodeinfo) == 2:
+                    if len(nodeinfo) == 2:
                         fromjid = nodeinfo[1]
                         list = [
                             {'name':fromjid + ' JID','jid':fromjid},
-                            {'node':'/'.join([NODE_ADMIN_REGISTERED_USERS, fromjid, NODE_ADMIN_SERVERS]),'name':fromjid + ' Registered Servers','jid':config.jid}]
+                            {'node':'/'.join([NODE_ADMIN_USERS, fromjid, NODE_ADMIN_REGISTERED_SERVERS]),'name':fromjid + ' Registered Servers','jid':config.jid},
+                            {'node':'/'.join([NODE_ADMIN_USERS, fromjid, NODE_ADMIN_ONLINE_SERVERS]),'name':fromjid + ' Online Servers','jid':config.jid}]
                     elif len(nodeinfo) == 3:
                         fromjid = nodeinfo[1]
                         fromstripped = fromjid.encode('utf8')
                         node = nodeinfo[2]
-                        if node == NODE_ADMIN_SERVERS:
+                        if node == NODE_ADMIN_REGISTERED_SERVERS:
                             servers = []
                             if userfile.has_key(fromstripped) \
                               and userfile[fromstripped].has_key('servers'):
@@ -615,32 +635,15 @@ class Transport:
                                 address = each
                                 if servers[each]['address']:
                                     address = servers[each]['address']
-                                list.append({'node':'/'.join([NODE_ADMIN_REGISTERED_USERS, fromjid, NODE_ADMIN_SERVERS, each]),'name':address,'jid':config.jid})
-                    return list
-            elif node.startswith(NODE_ADMIN_ONLINE_USERS):
-                if type == 'info':
-                    return {'ids':[],'features':[]}
-                if type == 'items':
-                    if not fromjid in config.admins:
-                        return []
-                    nodeinfo = node.split('/')
-                    list = []
-                    if len(nodeinfo) == 1:
-                        for each in self.users.keys():
-                            list.append({'node':'/'.join([NODE_ADMIN_ONLINE_USERS, each]),'name':each,'jid':config.jid})
-                    elif len(nodeinfo) == 2:
-                        fromjid = nodeinfo[1]
-                        list = [
-                            {'name':fromjid + ' JID','jid':fromjid},
-                            {'node':'/'.join([NODE_ADMIN_ONLINE_USERS, fromjid, NODE_ADMIN_SERVERS]),'name':fromjid + ' Online Servers','jid':config.jid}]
-                    elif len(nodeinfo) == 3:
-                        fromjid = nodeinfo[1]
-                        node = nodeinfo[2]
-                        if node == NODE_ADMIN_SERVERS:
+                                nick = ''
+                                if servers[each]['nick']:
+                                    nick = servers[each]['nick']
+                                list.append({'node':'/'.join([NODE_ADMIN_USERS, fromjid, NODE_ADMIN_REGISTERED_SERVERS, each]),'name':'%s/%s'%(address,nick),'jid':config.jid})
+                        elif node == NODE_ADMIN_ONLINE_SERVERS:
                             if self.users.has_key(fromjid):
                                 for each in self.users[fromjid].keys():
                                     conn = self.users[fromjid][each]
-                                    list.append({'node':'/'.join([NODE_ADMIN_ONLINE_USERS, fromjid, NODE_ADMIN_SERVERS, each]),'name':'%s:%s'%(conn.address,conn.port),'jid':config.jid})
+                                    list.append({'node':'/'.join([NODE_ADMIN_USERS, fromjid, NODE_ADMIN_ONLINE_SERVERS, each]),'name':'%s:%s/%s'%(conn.address,conn.port,conn.nickname),'jid':config.jid})
                     return list
             else:
                 self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))
@@ -652,7 +655,7 @@ class Transport:
                         'ids':[
                             {'category':'conference','type':'irc','name':server},
                             {'category':'gateway','type':'irc','name':server}],
-                        'features':[NS_REGISTER,NS_VERSION,NS_MUC,NS_COMMANDS]}
+                        'features':[NS_DISCO_INFO,NS_DISCO_ITEMS,NS_REGISTER,NS_VERSION,NS_MUC,NS_COMMANDS]}
                 if type == 'items':
                     list = [{'node':NS_COMMANDS,'name':'%s Commands'%server,'jid':'%s@%s' % (server, config.jid)}]
                     if self.users.has_key(fromjid):
@@ -664,7 +667,7 @@ class Transport:
                 if self.users.has_key(fromjid):
                     if self.users[fromjid].has_key(server):
                         if type == 'info':
-                            return {'ids':[],'features':[]}
+                            return {'ids':[],'features':[NS_DISCO_ITEMS]}
                         if type == 'items':
                             rep=event.buildReply('result')
                             rep.setQuerynode(node)
@@ -679,7 +682,7 @@ class Transport:
                 if self.users.has_key(fromjid):
                     if self.users[fromjid].has_key(server):
                         if type == 'info':
-                            return {'ids':[],'features':[]}
+                            return {'ids':[],'features':[NS_DISCO_ITEMS]}
                         if type == 'items':
                             list = []
                             if self.users.has_key(fromjid):
@@ -696,7 +699,7 @@ class Transport:
             if self.users.has_key(fromjid):
                 if self.users[fromjid].has_key(server):
                     if type == 'info':
-                        return {'ids':[{'category':'conference','type':'irc','name':channel}],'features':[NS_MUC]}
+                        return {'ids':[{'category':'conference','type':'irc','name':channel}],'features':[NS_DISCO_INFO,NS_MUC]}
                     if type == 'items':
                         return []
             self.jabber.send(Error(event,ERR_REGISTRATION_REQUIRED))
