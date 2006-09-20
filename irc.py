@@ -17,6 +17,7 @@ from xmpp.commands import *
 from xmpp.jep0106 import *
 import config, xmlconfig
 from jep0133 import *
+from irc_helpers import irc_ulower
 
 #Global definitions
 VERSTR = 'IRC Transport'
@@ -189,12 +190,6 @@ def colourparse(str,charset):
     else:
         html = ''
     return s,html
-
-_xlat = {91: u'{', 92: u'|', 93: u'}', 94: u'~'}
-def irc_ulower(str):
-    if str is None: return str
-    if len(str) == 0: return str
-    return str.translate(_xlat).lower()
 
 class Connect_Registered_Users_Command(xmpp.commands.Command_Handler_Prototype):
     """This is the """
