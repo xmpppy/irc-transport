@@ -10,13 +10,12 @@ version = 'CVS ' + '$Revision$'.split()[1]
 # For a full copy of the license please go here http://www.gnu.org/licenses/licenses.html#GPL
 
 import codecs, ConfigParser, os, platform, re, select, shelve, signal, socket, sys, time, traceback
-import irclib
+import irclib, xmpp.client
 from xmpp.protocol import *
 from xmpp.browser import *
-from xmpp.commands import *
 from xmpp.jep0106 import *
 import config, xmlconfig
-from jep0133 import *
+from commands import CommandFactory
 from irc_helpers import irc_ulower
 
 #Global definitions
@@ -191,211 +190,6 @@ def colourparse(str,charset):
         html = ''
     return s,html
 
-class Connect_Registered_Users_Command(xmpp.commands.Command_Handler_Prototype):
-    """This is the """
-    name = "connect-users"
-    description = 'Connect all registered users'
-    discofeatures = [xmpp.commands.NS_COMMANDS]
-
-    def __init__(self,jid=''):
-        """Initialise the command object"""
-        xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
-        self.initial = { 'execute':self.cmdFirstStage }
-
-    def _DiscoHandler(self,conn,request,type):
-        """The handler for discovery events"""
-        if request.getFrom().getStripped() in config.admins:
-            return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,request,type)
-        else:
-            return None
-
-    def cmdFirstStage(self,conn,request):
-        """Build the reply to complete the request"""
-        if request.getFrom().getStripped() in config.admins:
-            for each in userfile.keys():
-                conn.send(Presence(to=each, frm = config.jid, typ = 'probe'))
-                if userfile[each].has_key('servers'):
-                    for server in userfile[each]['servers']:
-                        conn.send(Presence(to=each, frm = '%s@%s'%(server,config.jid), typ = 'probe'))
-            reply = request.buildReply('result')
-            form = DataForm(typ='result',data=[DataField(value='Command completed.',typ='fixed')])
-            reply.addChild(name='command',namespace=NS_COMMAND,attrs={'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
-            self._owner.send(reply)
-        else:
-            self._owner.send(Error(request,ERR_FORBIDDEN))
-        raise NodeProcessed
-
-class Connect_Server_Command(xmpp.commands.Command_Handler_Prototype):
-    """This is the connect server command"""
-    name = 'connect-server'
-    description = 'Connect to server'
-    discofeatures = [xmpp.commands.NS_COMMANDS]
-
-    def __init__(self,transport,jid=''):
-        """Initialise the command object"""
-        xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
-        self.initial = { 'execute':self.cmdFirstStage }
-        self.transport = transport
-
-    def _DiscoHandler(self,conn,event,type):
-        """The handler for discovery events"""
-        fromjid = event.getFrom().getStripped().__str__()
-        to = event.getTo()
-        room = irc_ulower(to.getNode())
-        try:
-            channel, server = room.split('%',1)
-            channel = JIDDecode(channel)
-        except ValueError:
-            channel=''
-            server=room
-            sys.exc_clear()
-        if channel == '' and (not self.transport.users.has_key(fromjid) or not self.transport.users[fromjid].has_key(server)):
-            return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,event,type)
-        else:
-            return None
-
-    def cmdFirstStage(self,conn,event):
-        """Build the reply to complete the request"""
-        frm = event.getFrom()
-        to = event.getTo()
-        room = irc_ulower(to.getNode())
-        try:
-            channel, server = room.split('%',1)
-            channel = JIDDecode(channel)
-        except ValueError:
-            channel=''
-            server=room
-            sys.exc_clear()
-        if channel == '':
-            if self.transport.irc_connect('',server,'','',frm,Presence()):
-                self.transport.xmpp_presence_do_update(Presence(),server,frm.getStripped())
-                reply = event.buildReply('result')
-                form = DataForm(typ='result',data=[DataField(value='Command completed.',typ='fixed')])
-                reply.addChild(name='command',namespace=NS_COMMAND,attrs={'node':event.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
-                self._owner.send(reply)
-                raise NodeProcessed
-            else:
-                self._owner.send(Error(event,ERR_CONFLICT))
-                raise NodeProcessed
-        else:
-            self._owner.send(Error(event,ERR_ITEM_NOT_FOUND))
-            raise NodeProcessed
-
-class Disconnect_Server_Command(xmpp.commands.Command_Handler_Prototype):
-    """This is the disconnect server command"""
-    name = 'disconnect-server'
-    description = 'Disconnect from server'
-    discofeatures = [xmpp.commands.NS_COMMANDS]
-
-    def __init__(self,transport,jid=''):
-        """Initialise the command object"""
-        xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
-        self.initial = { 'execute':self.cmdFirstStage }
-        self.transport = transport
-
-    def _DiscoHandler(self,conn,event,type):
-        """The handler for discovery events"""
-        fromjid = event.getFrom().getStripped().__str__()
-        to = event.getTo()
-        room = irc_ulower(to.getNode())
-        try:
-            channel, server = room.split('%',1)
-            channel = JIDDecode(channel)
-        except ValueError:
-            channel=''
-            server=room
-            sys.exc_clear()
-        if channel == '' and self.transport.users.has_key(fromjid) and self.transport.users[fromjid].has_key(server):
-            return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,event,type)
-        else:
-            return None
-
-    def cmdFirstStage(self,conn,event):
-        """Build the reply to complete the request"""
-        frm = event.getFrom()
-        to = event.getTo()
-        room = irc_ulower(to.getNode())
-        try:
-            channel, server = room.split('%',1)
-            channel = JIDDecode(channel)
-        except ValueError:
-            channel=''
-            server=room
-            sys.exc_clear()
-        if channel == '':
-            if self.transport.irc_disconnect('',server,frm,None):
-                self.transport.xmpp_presence_do_update(None,server,frm.getStripped())
-                reply = event.buildReply('result')
-                form = DataForm(typ='result',data=[DataField(value='Command completed.',typ='fixed')])
-                reply.addChild(name='command',namespace=NS_COMMAND,attrs={'node':event.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
-                self._owner.send(reply)
-                raise NodeProcessed
-            else:
-                self._owner.send(Error(event,ERR_ITEM_NOT_FOUND))
-                raise NodeProcessed
-        else:
-            self._owner.send(Error(event,ERR_ITEM_NOT_FOUND))
-            raise NodeProcessed
-
-class Message_Of_The_Day(xmpp.commands.Command_Handler_Prototype):
-    """This is the message of the day server command"""
-    name = 'motd'
-    description = 'Retrieve Message of the Day'
-    discofeatures = [xmpp.commands.NS_COMMANDS]
-
-    def __init__(self,transport,jid=''):
-        """Initialise the command object"""
-        xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
-        self.initial = { 'execute':self.cmdFirstStage }
-        self.transport = transport
-
-    def _DiscoHandler(self,conn,event,type):
-        """The handler for discovery events"""
-        fromjid = event.getFrom().getStripped().__str__()
-        to = event.getTo()
-        room = irc_ulower(to.getNode())
-        try:
-            channel, server = room.split('%',1)
-            channel = JIDDecode(channel)
-        except ValueError:
-            channel=''
-            server=room
-            sys.exc_clear()
-        if channel == '' and self.transport.users.has_key(fromjid) and self.transport.users[fromjid].has_key(server):
-            return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,event,type)
-        else:
-            return None
-
-    def cmdFirstStage(self,conn,event):
-        """Build the reply to complete the request"""
-        fromjid = event.getFrom().getStripped().__str__()
-        to = event.getTo()
-        room = irc_ulower(to.getNode())
-        try:
-            channel, server = room.split('%',1)
-            channel = JIDDecode(channel)
-        except ValueError:
-            channel=''
-            server=room
-            sys.exc_clear()
-        if channel == '':
-            if self.transport.users.has_key(fromjid) \
-              and self.transport.users[fromjid].has_key(server):
-                # TODO: MOTD must become pending event, so it can go back to the right resource
-                self.transport.users[fromjid][server].motdhash = ''
-                self.transport.users[fromjid][server].motd()
-                reply = event.buildReply('result')
-                form = DataForm(typ='result',data=[DataField(value='Command completed.',typ='fixed')])
-                reply.addChild(name='command',namespace=NS_COMMAND,attrs={'node':event.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
-                self._owner.send(reply)
-                raise NodeProcessed
-            else:
-                self._owner.send(Error(event,ERR_ITEM_NOT_FOUND))
-                raise NodeProcessed
-        else:
-            self._owner.send(Error(event,ERR_ITEM_NOT_FOUND))
-            raise NodeProcessed
-
 class Transport:
     # This class is the main collection of where all the handlers for both the IRC and Jabber
 
@@ -500,28 +294,8 @@ class Transport:
         self.jabber.RegisterHandler('iq',self.xmpp_iq_vcard,typ = 'get', ns=NS_VCARD)
         self.disco = Browser()
         self.disco.PlugIn(self.jabber)
-        self.command = Commands(self.disco)
-        self.command.PlugIn(self.jabber)
-        self.cmdconnectusers = Connect_Registered_Users_Command(jid=config.jid)
-        self.cmdconnectusers.plugin(self.command)
-        self.cmdonlineusers = Online_Users_Command(self.users,jid=config.jid)
-        self.cmdonlineusers.plugin(self.command)
-        self.cmdactiveusers = Active_Users_Command(self.users,jid=config.jid)
-        self.cmdactiveusers.plugin(self.command)
-        self.cmdregisteredusers = Registered_Users_Command(userfile,jid=config.jid)
-        self.cmdregisteredusers.plugin(self.command)
-        self.cmdeditadminusers = Edit_Admin_List_Command(jid=config.jid)
-        self.cmdeditadminusers.plugin(self.command)
-        self.cmdrestartservice = Restart_Service_Command(self,jid=config.jid)
-        self.cmdrestartservice.plugin(self.command)
-        self.cmdshutdownservice = Shutdown_Service_Command(self,jid=config.jid)
-        self.cmdshutdownservice.plugin(self.command)
-        self.cmdconnectserver = Connect_Server_Command(self,jid='')
-        self.cmdconnectserver.plugin(self.command)
-        self.cmddisconnectserver = Disconnect_Server_Command(self,jid='')
-        self.cmddisconnectserver.plugin(self.command)
-        self.cmdmessageoftheday = Message_Of_The_Day(self,jid='')
-        self.cmdmessageoftheday.plugin(self.command)
+        self.commandfactory = CommandFactory(userfile)
+        self.commandfactory.PlugIn(self)
         self.disco.setDiscoHandler(self.xmpp_base_disco,node='',jid=config.jid)
         self.disco.setDiscoHandler(self.xmpp_base_disco,node='',jid='')
 
