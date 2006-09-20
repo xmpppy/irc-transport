@@ -972,16 +972,16 @@ class Transport:
             else:
                 self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))  # or MALFORMED_JID maybe?
         elif type in ['chat', None]:
-            if nick == to.getResource():
-                conn.send_raw('%s %s' % (nick.upper().encode(conn.charset,'replace'),event.getBody().encode(conn.charset,'replace')))
-            elif nick:
+            if nick:
                 if conn.activechats.has_key(irc_ulower(nick)):
                     conn.activechats[irc_ulower(nick)] = [to,event.getFrom(),time.time(),conn.activechats[irc_ulower(nick)][3]]
                 else:
                     conn.activechats[irc_ulower(nick)] = [to,event.getFrom(),time.time(),{}]
                     if len(room.split('%',1)) > 1:
                         self.irc_sendctcp('CAPABILITIES',conn,nick,'')
-                if event.getBody()[0:3] == '/me':
+                if not channel and nick == to.getResource():
+                    conn.send_raw('%s %s' % (nick.upper().encode(conn.charset,'replace'),event.getBody().encode(conn.charset,'replace')))
+                elif event.getBody()[0:3] == '/me':
                     self.irc_sendctcp('ACTION',conn,nick,event.getBody()[4:])
                 else:
                     self.irc_sendroom(conn,nick,event.getBody())
