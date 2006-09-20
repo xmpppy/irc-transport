@@ -2217,6 +2217,35 @@ class Transport:
         m = Message(to=conn.fromjid,body=line,typ='chat',frm=frm,payload = [xhtml])
         self.jabber.send(m)
 
+    def nm_is_service(self,conn,nickmask):
+        try:
+            userhost = unicode(irclib.nm_to_uh(nickmask),conn.charset,'replace')
+            try:
+                user,host = userhost.lower().split('@', 1)
+                servername = conn.get_server_name().lower()
+                serverprefix,serverdomain = servername.split('.', 1)
+                #server_name        nickname!ident@host
+                #irc.zanet.net:     NickServ!services@zanet.net
+                #irc.lagnet.org.za: NickServ!services@lagnet.org.za
+                #irc.zanet.org.za:  NickServ!NickServ@zanet.org.za
+                if host == serverdomain: userhost=''
+                #irc.za.ethereal.web.za: Nik!services@ethereal.web.za
+                if user == 'services' and ('.%s'%host == servername[-len(host)-1:]): userhost=''
+                #irc.oftc.net:      NickServ!services@services.oftc.net
+                #irc.za.somewhere:  NickServ!services@services.somewhere
+                if user == 'services' and (host == 'services%s'%servername[-len(host)+8:]): userhost=''
+                #irc.freenode.net:  NickServ!NickServ@services.
+                if host == 'services.': userhost=''
+            except:
+                sys.exc_clear()
+        except IndexError:
+            userhost = ''
+            sys.exc_clear()
+        if userhost:
+            return False
+        else:
+            return True
+
     def nm_to_jidinfo(self,conn,nickmask):
         try:
             nick = unicode(irclib.nm_to_n(nickmask),conn.charset,'replace')
@@ -2246,28 +2275,10 @@ class Transport:
                 return chat[0],'%s/%s'%(conn.fromjid,self.find_highest_resource(resources)),chat[3]
             else:
                 return chat[0],conn.fromjid,chat[3]
-        try:
-            userhost = unicode(irclib.nm_to_uh(nickmask),conn.charset,'replace')
-            try:
-                host = unicode(irclib.nm_to_h(nickmask),conn.charset,'replace').lower()
-                serverprefix,serverdomain = conn.get_server_name().lower().split('.', 1)
-                #irc.zanet.net:     NickServ!services@zanet.net
-                #irc.lagnet.org.za: NickServ!services@lagnet.org.za
-                #irc.zanet.org.za:  NickServ!NickServ@zanet.org.za
-                if host == serverdomain: userhost=''
-                #irc.oftc.net:      NickServ!services@services.oftc.net
-                if host == 'services.%s'%serverdomain: userhost=''
-                #irc.freenode.net:  NickServ!NickServ@services.
-                if host == 'services.': userhost=''
-            except:
-                sys.exc_clear()
-        except:
-            userhost = ''
-            sys.exc_clear()
-        if userhost:
-            frm = '%s%%%s@%s' %(nick,conn.server,config.jid)
-        else:
+        if self.nm_is_service(conn,nickmask):
             frm = '%s@%s/%s' %(conn.server,config.jid,nick)
+        else:
+            frm = '%s%%%s@%s' %(nick,conn.server,config.jid)
         return frm,conn.fromjid,{}
 
     def irc_privmsg(self,conn,event,msg):
