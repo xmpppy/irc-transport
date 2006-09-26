@@ -15,7 +15,7 @@ from xmpp.protocol import *
 from xmpp.browser import *
 from xmpp.jep0106 import *
 import config, xmlconfig
-from commands import CommandFactory
+from adhoc import AdHocCommands
 from irc_helpers import irc_ulower
 
 #Global definitions
@@ -294,8 +294,8 @@ class Transport:
         self.jabber.RegisterHandler('iq',self.xmpp_iq_vcard,typ = 'get', ns=NS_VCARD)
         self.disco = Browser()
         self.disco.PlugIn(self.jabber)
-        self.commandfactory = CommandFactory(userfile)
-        self.commandfactory.PlugIn(self)
+        self.adhoccommands = AdHocCommands(userfile)
+        self.adhoccommands.PlugIn(self)
         self.disco.setDiscoHandler(self.xmpp_base_disco,node='',jid=config.jid)
         self.disco.setDiscoHandler(self.xmpp_base_disco,node='',jid='')
 

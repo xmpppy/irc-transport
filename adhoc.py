@@ -6,7 +6,7 @@ import config
 from jep0133 import *
 from irc_helpers import irc_ulower
 
-class CommandFactory:
+class AdHocCommands:
 
     def __init__(self, userfile):
         self.userfile = userfile
