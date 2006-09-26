@@ -63,7 +63,7 @@
     <!-- The file to log to. Leave this disabled for stdout only -->
     <debugFile>ircerror.log</debugFile>
 
-    <!-- Show the raw data being sent and received from the xmpp and yahoo servers -->
+    <!-- Show the raw data being sent and received from the xmpp and irc servers -->
     <!--<dumpProtocol/>-->
 
     <!-- The default charset to use for the transport, if not supplied by the user when registering -->
