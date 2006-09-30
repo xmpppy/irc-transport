@@ -1990,33 +1990,32 @@ class Transport:
         self.jabber.send(m)
 
     def nm_is_service(self,conn,nickmask):
+        if not nickmask:
+            return True
         try:
             userhost = unicode(irclib.nm_to_uh(nickmask),conn.charset,'replace')
-            try:
-                user,host = userhost.lower().split('@', 1)
-                servername = conn.get_server_name().lower()
-                serverprefix,serverdomain = servername.split('.', 1)
-                #server_name        nickname!ident@host
-                #irc.zanet.net:     NickServ!services@zanet.net
-                #irc.lagnet.org.za: NickServ!services@lagnet.org.za
-                #irc.zanet.org.za:  NickServ!NickServ@zanet.org.za
-                if host == serverdomain: userhost=''
-                #irc.za.ethereal.web.za: Nik!services@ethereal.web.za
-                if user == 'services' and ('.%s'%host == servername[-len(host)-1:]): userhost=''
-                #irc.oftc.net:      NickServ!services@services.oftc.net
-                #irc.za.somewhere:  NickServ!services@services.somewhere
-                if user == 'services' and (host == 'services%s'%servername[-len(host)+8:]): userhost=''
-                #irc.freenode.net:  NickServ!NickServ@services.
-                if host == 'services.': userhost=''
-            except:
-                sys.exc_clear()
         except IndexError:
-            userhost = ''
             sys.exc_clear()
-        if userhost:
-            return False
-        else:
             return True
+        try:
+            user,host = userhost.lower().split('@', 1)
+            servername = conn.get_server_name().lower()
+            serverprefix,serverdomain = servername.split('.', 1)
+            #server_name        nickname!ident@host
+            #irc.zanet.net:     NickServ!services@zanet.net
+            #irc.lagnet.org.za: NickServ!services@lagnet.org.za
+            #irc.zanet.org.za:  NickServ!NickServ@zanet.org.za
+            if host == serverdomain: return True
+            #irc.za.ethereal.web.za: Nik!services@ethereal.web.za
+            if user == 'services' and ('.%s'%host == servername[-len(host)-1:]): return True
+            #irc.oftc.net:      NickServ!services@services.oftc.net
+            #irc.za.somewhere:  NickServ!services@services.somewhere
+            if user == 'services' and (host == 'services%s'%servername[-len(host)+8:]): return True
+            #irc.freenode.net:  NickServ!NickServ@services.
+            if host == 'services.': return True
+        except:
+            sys.exc_clear()
+        return False
 
     def nm_to_jidinfo(self,conn,nickmask):
         try:
