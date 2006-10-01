@@ -631,7 +631,7 @@ class Transport:
               and self.users.has_key(fromjid.getStripped()) \
               and self.users[fromjid.getStripped()].has_key(server):
                 if not self.users[fromjid.getStripped()][server].features.has_key('WATCH'):
-                    self.irc_doison(self.users[fromjid.getStripped()][server])
+                    self.irc_doison(self.users[fromjid.getStripped()][server],1)
 
     def xmpp_presence_do_update(self,event,server,fromjid):
         if fromjid not in self.users.keys() or \
@@ -1342,7 +1342,7 @@ class Transport:
                     if conn.features.has_key('WATCH'):
                         conn.send_raw('WATCH')
                     else:
-                        self.irc_doison(conn)
+                        self.irc_doison(conn,1)
         else: # the other cases
             conn=self.irc_newconn(channel,server,nick,password,frm)
             if conn != None:
@@ -1574,22 +1574,24 @@ class Transport:
                         for nick in subscriptions:
                             conn.send_raw('WATCH +%s' % nick.encode(conn.charset,'replace'))
 
-    def irc_doison(self,conn):
-        fromstripped = conn.fromjid.encode('utf8')
-        if userfile.has_key(fromstripped) \
-          and userfile[fromstripped].has_key('servers') \
-          and userfile[fromstripped]['servers'].has_key(conn.server):
-            conf = userfile[fromstripped]['servers'][conn.server]
-            if conf.has_key('subscriptions'):
-                subscriptions = conf['subscriptions']
-                if not conn.features.has_key('WATCH'):
-                    if len(subscriptions) > 0:
-                        conn.ison(subscriptions)
-                    else:
-                        for nick in conn.isonlist:
-                            name = '%s%%%s' % (nick, conn.server)
-                            self.jabber.send(Presence(to=conn.fromjid, frm = '%s@%s' %(name, config.jid), typ = 'unavailable'))
-                        conn.isonlist = []
+    def irc_doison(self,conn,force=0):
+        if force or time.time() - conn.lastdoison > 10:
+            fromstripped = conn.fromjid.encode('utf8')
+            if userfile.has_key(fromstripped) \
+              and userfile[fromstripped].has_key('servers') \
+              and userfile[fromstripped]['servers'].has_key(conn.server):
+                conf = userfile[fromstripped]['servers'][conn.server]
+                if conf.has_key('subscriptions'):
+                    subscriptions = conf['subscriptions']
+                    if not conn.features.has_key('WATCH'):
+                        if len(subscriptions) > 0:
+                            conn.ison(subscriptions)
+                        else:
+                            for nick in conn.isonlist:
+                                name = '%s%%%s' % (nick, conn.server)
+                                self.jabber.send(Presence(to=conn.fromjid, frm = '%s@%s' %(name, config.jid), typ = 'unavailable'))
+                            conn.isonlist = []
+            conn.lastdoison = time.time()
 
     def irc_ison(self,conn,event):
         newlist = event.arguments()[0].split()
@@ -1624,6 +1626,7 @@ class Transport:
         freq = 90 # ison query frequency in seconds
         offset = int(time.time())%freq
         conn.isontimer=(freq,offset,self.irc_doison,[conn])
+        conn.lastdoison=0
         timerlist.append(conn.isontimer)
 
         if conn.joinchan:
