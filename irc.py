@@ -1253,7 +1253,7 @@ class Transport:
             self.irc_doquit(conn,message)
 
     def irc_disconnected(self,conn,event):
-        #if config.dumpProtocol: print "disconnected by %s" % conn.address
+        if config.dumpProtocol: print "disconnected by %s" % conn.address
         self.irc_doquit(conn)
 
     def irc_settopic(self,conn,channel,line):
@@ -2222,7 +2222,7 @@ if __name__ == '__main__':
                 user = transport.users[userkey]
                 for serverkey, server in user.items():
                     if server._get_socket() == None:
-                        #if config.dumpProtocol: print "disconnected by %s" % server.address
+                        if config.dumpProtocol: print "disconnected by %s" % server.address
                         transport.irc_doquit(server)
             for each in socketlist.keys():
                 try:
@@ -2273,8 +2273,6 @@ if __name__ == '__main__':
         logfile.close()
     if transport.restart:
         args=[sys.executable]+sys.argv
-        if os.name == 'nt':
-            def quote(a): return "\"%s\"" % a
-            args = map(quote, args)
-        #print sys.executable, args
+        if os.name == 'nt': args = ["\"%s\"" % a for a in args]
+        if config.dumpProtocol: print sys.executable, args
         os.execv(sys.executable, args)
