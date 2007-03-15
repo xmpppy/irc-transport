@@ -6,6 +6,9 @@
     <!-- The JabberID of the transport -->
     <jid>irc.localhost</jid>
 
+    <!-- The component JID of the transport. Unless you're doing clustering, leave this alone -->
+    <!-- <compjid>irc1</compjid> -->
+
     <!-- The public IP or DNS name of the machine the transport is running on -->
     <!-- This is used to select the outgoing IP address used to connect to IRC networks -->
     <!--  otherwise known as the vanity address, it's safe to leave it commented -->

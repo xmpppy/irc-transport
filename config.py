@@ -5,6 +5,7 @@ configFiles = ['config.xml', '/etc/pyirct.conf.xml']
 configFile = None
 
 jid = "irc"
+compjid = ""
 host = ""
 discoName = "IRC Transport"
 spoolFile = "user.dbm"
