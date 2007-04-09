@@ -190,6 +190,28 @@ def colourparse(str,charset):
         html = ''
     return s,html
 
+def pendingop_push(conn, op, callback, data):
+    if not conn.pendingoperations.has_key(op):
+        conn.pendingoperations[op]=[]
+    conn.pendingoperations[op].append((callback, data))
+    if config.dumpProtocol: print 'pendingoperations:',repr(conn.pendingoperations)
+
+def pendingop_call(conn, op, event):
+    #if config.dumpProtocol: print 'pendingoperations:',repr(conn.pendingoperations)
+    if conn.pendingoperations.has_key(op):
+        info = conn.pendingoperations[op][0]
+        return info[0](conn,info[1],event)
+    return None
+
+def pendingop_pop(conn, op):
+    if conn.pendingoperations.has_key(op):
+        info = conn.pendingoperations[op].pop(0)
+        if conn.pendingoperations[op] == []:
+            del conn.pendingoperations[op]
+        if config.dumpProtocol: print 'pendingoperations:',repr(conn.pendingoperations)
+        return info[1]
+    if config.dumpProtocol: print 'pendingoperations:',repr(conn.pendingoperations)
+
 class Transport:
     # This class is the main collection of where all the handlers for both the IRC and Jabber
 
@@ -443,9 +465,8 @@ class Transport:
                         if type == 'items':
                             rep=event.buildReply('result')
                             rep.setQuerynode(node)
-                            q=rep.getTag('query')
                             conn = self.users[fromjid][server]
-                            conn.pendingoperations["list"] = rep
+                            pendingop_push(conn, 'list', self.irc_list_items, rep)
                             conn.list()
                             raise NodeProcessed
                 self.jabber.send(Error(event,ERR_REGISTRATION_REQUIRED))
@@ -471,7 +492,14 @@ class Transport:
             if self.users.has_key(fromjid):
                 if self.users[fromjid].has_key(server):
                     if type == 'info':
-                        return {'ids':[{'category':'conference','type':'irc','name':channel}],'features':[NS_DISCO_INFO,NS_MUC]}
+                        rep=event.buildReply('result')
+                        q=rep.getTag('query')
+                        q.addChild('feature',{'var':NS_DISCO_INFO})
+                        q.addChild('feature',{'var':NS_MUC})
+                        conn = self.users[fromjid][server]
+                        pendingop_push(conn, 'list', self.irc_list_info, rep)
+                        conn.list([channel])
+                        raise NodeProcessed
                     if type == 'items':
                         return []
             self.jabber.send(Error(event,ERR_REGISTRATION_REQUIRED))
@@ -1938,20 +1966,35 @@ class Transport:
             self.irc_rawtext(conn,'whois',event,' '.join(event.arguments()[1:]))
 
     def irc_list(self,conn,event):
+        if not pendingop_call(conn, 'list', event):
+            self.irc_rawtext(conn,'list',event,' '.join(event.arguments()))
+
+    def irc_list_items(self,conn,rep,event):
         chan = event.arguments()[0]
         if irclib.is_channel(chan):
             chan = unicode(chan,conn.charset,'replace')
-            if conn.pendingoperations.has_key("list"):
-                rep = conn.pendingoperations["list"]
-                q=rep.getTag('query')
-                q.addChild('item',{'name':chan,'jid':'%s%%%s@%s' % (JIDEncode(chan), conn.server, config.jid)})
-            else:
-                self.irc_rawtext(conn,'list',event,' '.join(event.arguments()))
+            q=rep.getTag('query')
+            q.addChild('item',{'name':chan,'jid':'%s%%%s@%s' % (JIDEncode(chan), conn.server, config.jid)})
+        return True
+
+    def irc_list_info(self,conn,rep,event):
+        chan = event.arguments()[0]
+        if irclib.is_channel(chan):
+            membercount = event.arguments()[1]
+            line,xhtml = colourparse(event.arguments()[2],conn.charset)
+            chan = unicode(chan,conn.charset,'replace')
+            q=rep.getTag('query')
+            q.addChild('identity',{'category':'conference','type':'irc','name':chan})
+            form = DataForm(typ='result',data=[
+                DataField(                            name='FORM_TYPE'             ,value='http://jabber.org/protocol/muc#roominfo',typ='hidden'),
+                DataField(label='Subject'            ,name='muc#roominfo_subject'  ,value=line                                     ,typ='text-single'),
+                DataField(label='Number of occupants',name='muc#roominfo_occupants',value=membercount                              ,typ='text-single')])
+            q.addChild(node=form)
+            return True
 
     def irc_listend(self,conn,event):
-        if conn.pendingoperations.has_key("list"):
-            rep = conn.pendingoperations["list"]
-            del conn.pendingoperations["list"]
+        rep = pendingop_pop(conn,'list')
+        if rep:
             self.jabber.send(rep)
         else:
             self.irc_rawtext(conn,'list',event,' '.join(event.arguments()))
