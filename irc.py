@@ -1044,6 +1044,9 @@ class Transport:
             self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
             raise xmpp.NodeProcessed
 
+        instructionText = 'Please provide your IRC connection information, along with the charset to use. (eg cp437, cp1250, iso-8859-1, koi8-r)'
+        queryPayload = [Node('instructions', payload = instructionText)]
+
         serverdetails = {'address':'','nick':'','password':'','realname':'','username':''}
         if userfile.has_key(fromjid):
             charset = userfile[fromjid]['charset']
@@ -1052,9 +1055,8 @@ class Transport:
                 if servers.has_key(server):
                     serverdetails = servers[server]
                     charset = serverdetails['charset']
+            queryPayload += [Node('registered')]
 
-        m = event.buildReply('result')
-        m.setQueryNS(NS_REGISTER)
         if server:
             nametype='hidden'
         else:
@@ -1067,16 +1069,19 @@ class Transport:
             DataField(desc='Password or secret for the user'        ,name='password',value=serverdetails['password'],typ='text-private'),
             DataField(desc='Full name of the user'                  ,name='name'    ,value=serverdetails['realname'],typ='text-single'),
             DataField(desc='Account name associated with the user'  ,name='username',value=serverdetails['username'],typ='text-single')])
-        form.setInstructions('Please provide your legacy Character set or charset. (eg cp437, cp1250, iso-8859-1, koi8-r)')
-        m.setQueryPayload([
-            Node('instructions', payload = 'Please provide your legacy Character set or charset. (eg cp437, cp1250, iso-8859-1, koi8-r)'),
+        form.setInstructions(instructionText)
+        queryPayload += [
             Node('charset'  ,payload=charset),
             Node('address'  ,payload=serverdetails['address']),
             Node('nick'     ,payload=serverdetails['nick']),
             Node('password' ,payload=serverdetails['password']),
             Node('name'     ,payload=serverdetails['realname']),
             Node('username' ,payload=serverdetails['username']),
-            form])
+            form]
+
+        m = event.buildReply('result')
+        m.setQueryNS(NS_REGISTER)
+        m.setQueryPayload(queryPayload)
         self.jabber.send(m)
         raise xmpp.NodeProcessed
 
