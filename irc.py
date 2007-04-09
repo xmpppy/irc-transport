@@ -1986,11 +1986,11 @@ class Transport:
             q=rep.getTag('query')
             q.addChild('identity',{'category':'conference','type':'irc','name':chan})
             form = DataForm(typ='result',data=[
-                DataField(                            name='FORM_TYPE'             ,value='http://jabber.org/protocol/muc#roominfo',typ='hidden'),
-                DataField(label='Subject'            ,name='muc#roominfo_subject'  ,value=line                                     ,typ='text-single'),
-                DataField(label='Number of occupants',name='muc#roominfo_occupants',value=membercount                              ,typ='text-single')])
+                DataField(                            name='FORM_TYPE'             ,value=NS_MUC_ROOMINFO,typ='hidden'),
+                DataField(label='Subject'            ,name='muc#roominfo_subject'  ,value=line           ,typ='text-single'),
+                DataField(label='Number of occupants',name='muc#roominfo_occupants',value=membercount    ,typ='text-single')])
             q.addChild(node=form)
-            return True
+        return True
 
     def irc_listend(self,conn,event):
         rep = pendingop_pop(conn,'list')
