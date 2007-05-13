@@ -193,14 +193,15 @@ def colourparse(str,charset):
 def pendingop_push(conn, op, callback, data):
     if not conn.pendingoperations.has_key(op):
         conn.pendingoperations[op]=[]
-    conn.pendingoperations[op].append((callback, data))
-    if config.dumpProtocol: print 'pendingoperations:',repr(conn.pendingoperations)
+    conn.pendingoperations[op].append((op, callback, data))
+    conn.allpendingoperations.append((op, callback, data))
+    if config.dumpProtocol: print 'pendingoperations:',repr(conn.pendingoperations),'\nallpendingoperations:',repr(conn.allpendingoperations)
 
 def pendingop_call(conn, op, event):
-    #if config.dumpProtocol: print 'pendingoperations:',repr(conn.pendingoperations)
+    #if config.dumpProtocol: print 'pendingoperations:',repr(conn.pendingoperations),'\nallpendingoperations:',repr(conn.allpendingoperations)
     if conn.pendingoperations.has_key(op):
         info = conn.pendingoperations[op][0]
-        return info[0](conn,info[1],event)
+        return info[1](conn,event,op,info[2])
     return None
 
 def pendingop_pop(conn, op):
@@ -208,9 +209,18 @@ def pendingop_pop(conn, op):
         info = conn.pendingoperations[op].pop(0)
         if conn.pendingoperations[op] == []:
             del conn.pendingoperations[op]
-        if config.dumpProtocol: print 'pendingoperations:',repr(conn.pendingoperations)
-        return info[1]
-    if config.dumpProtocol: print 'pendingoperations:',repr(conn.pendingoperations)
+        conn.allpendingoperations.remove(info)
+        if config.dumpProtocol: print 'pendingoperations:',repr(conn.pendingoperations),'\nallpendingoperations:',repr(conn.allpendingoperations)
+        return info[2]
+    if config.dumpProtocol: print 'pendingoperations:',repr(conn.pendingoperations),'\nallpendingoperations:',repr(conn.allpendingoperations)
+
+def pendingop_fail(conn, event):
+    if conn.allpendingoperations == []:
+        return None
+    info = conn.allpendingoperations[0]
+    pendingop_pop(conn, info[0])
+    if config.dumpProtocol: print 'pendingoperation',info[0],'failed!'
+    return info[1](conn,event,'fail',info[2])
 
 class Transport:
     # This class is the main collection of where all the handlers for both the IRC and Jabber
@@ -243,7 +253,11 @@ class Transport:
     #       currenttopic        - string
     #       members             - hash      - key is nick of member, value is hash, key is 'affiliation', 'role', 'jid', 'nick'
     #       resources           - hash      - key is resource, value is tuple of: show, priority, status, login time
-    #   pendingoperations   - hash      - key is internal name of operation, joined with nick if applicable, value is xmpp message #TODO: make value into a list
+    #   pendingoperations   - hash      - key is internal name of operation, joined with nick if applicable, value a list of tuples of (op,callback,data)
+    #       op                  - string
+    #       callback            - function
+    #       data                - generally an xmpp message to send on completion
+    #   allpendingoperations- list      - list of tuples of all pending operations
     #   activechats         - hash      - key is nick, value is list of: irc jid, xmpp jid, last message time, capabilities
     #   charset             - string
 
@@ -303,6 +317,7 @@ class Transport:
         self.irc.add_global_handler('endofwhois',self.irc_endofwhois)
         self.irc.add_global_handler('list',self.irc_list)
         self.irc.add_global_handler('listend',self.irc_listend)
+        self.irc.add_global_handler('tryagain',self.irc_tryagain)
         self.jabber.RegisterHandler('message',self.xmpp_message)
         self.jabber.RegisterHandler('presence',self.xmpp_presence)
         #Disco stuff now done by disco object
@@ -313,6 +328,8 @@ class Transport:
         self.jabber.RegisterHandler('iq',self.xmpp_iq_mucowner_get,typ = 'get', ns=NS_MUC_OWNER)
         self.jabber.RegisterHandler('iq',self.xmpp_iq_register_set,typ = 'set', ns=NS_REGISTER)
         self.jabber.RegisterHandler('iq',self.xmpp_iq_register_get,typ = 'get', ns=NS_REGISTER)
+        self.jabber.RegisterHandler('iq',self.xmpp_iq_search_set,typ = 'set', ns=NS_SEARCH)
+        self.jabber.RegisterHandler('iq',self.xmpp_iq_search_get,typ = 'get', ns=NS_SEARCH)
         self.jabber.RegisterHandler('iq',self.xmpp_iq_vcard,typ = 'get', ns=NS_VCARD)
         self.disco = Browser()
         self.disco.PlugIn(self.jabber)
@@ -449,7 +466,7 @@ class Transport:
                         'ids':[
                             {'category':'conference','type':'irc','name':server},
                             {'category':'gateway','type':'irc','name':server}],
-                        'features':[NS_DISCO_INFO,NS_DISCO_ITEMS,NS_REGISTER,NS_VERSION,NS_MUC,NS_COMMANDS]}
+                        'features':[NS_DISCO_INFO,NS_DISCO_ITEMS,NS_REGISTER,NS_VERSION,NS_MUC,NS_COMMANDS,NS_SEARCH]}
                 if type == 'items':
                     list = [{'node':NS_COMMANDS,'name':'%s Commands'%server,'jid':'%s@%s' % (server, config.jid)}]
                     if self.users.has_key(fromjid):
@@ -498,7 +515,7 @@ class Transport:
                         q.addChild('feature',{'var':NS_MUC})
                         conn = self.users[fromjid][server]
                         pendingop_push(conn, 'list', self.irc_list_info, rep)
-                        conn.list([channel])
+                        conn.list([channel.encode(conn.charset,'replace')])
                         raise NodeProcessed
                     if type == 'items':
                         return []
@@ -1247,6 +1264,87 @@ class Transport:
         userfile.sync()
         raise xmpp.NodeProcessed
 
+    def xmpp_iq_search_get(self, con, event):
+        charset = config.charset
+        fromjid = event.getFrom().getStripped().encode('utf8')
+        to = event.getTo()
+        room = irc_ulower(to.getNode())
+        try:
+            channel, server = room.split('%',1)
+            channel = JIDDecode(channel)
+        except ValueError:
+            channel=''
+            server=room
+            sys.exc_clear()
+        if not server or not channel == '':
+            self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
+            raise xmpp.NodeProcessed
+
+        if self.users.has_key(fromjid):
+            if self.users[fromjid].has_key(server):
+
+                instructionText = 'Fill in the form to search for any matching room (Add * to the end of field to match substring)'
+                queryPayload = [Node('instructions', payload = instructionText)]
+        
+                form = DataForm(typ='form',data=[
+                    DataField(desc='Name of the channel',name='name',typ='text-single')])
+                form.setInstructions(instructionText)
+                queryPayload += [
+                    Node('name'),
+                    form]
+        
+                m = event.buildReply('result')
+                m.setQueryNS(NS_SEARCH)
+                m.setQueryPayload(queryPayload)
+                self.jabber.send(m)
+                raise xmpp.NodeProcessed
+
+        self.jabber.send(Error(event,ERR_REGISTRATION_REQUIRED))
+        raise NodeProcessed
+
+    def xmpp_iq_search_set(self, con, event):
+        charset = config.charset
+        fromjid = event.getFrom().getStripped().encode('utf8')
+        to = event.getTo()
+        room = irc_ulower(to.getNode())
+        try:
+            channel, server = room.split('%',1)
+            channel = JIDDecode(channel)
+        except ValueError:
+            channel=''
+            server=room
+            sys.exc_clear()
+        if not channel == '':
+            self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
+            raise xmpp.NodeProcessed
+
+        query = event.getTag('query')
+        if query.getTag(name='x',namespace=NS_DATA):
+            form = DataForm(node=query.getTag(name='x',namespace=NS_DATA))
+            if form.getField('name'):
+                name = form.getField('name').getValue()
+        elif query.getTag('name'):
+            name = query.getTagData('name')
+
+        if self.users.has_key(fromjid):
+            if self.users[fromjid].has_key(server):
+                rep=event.buildReply('result')
+                q=rep.getTag('query')
+                reported = Node('reported',payload=[
+                    DataField(label='JID'                ,name='jid'                   ,typ='jid-single'),
+                    DataField(label='Channel'            ,name='name'                  ,typ='text-single'),
+                    DataField(label='Subject'            ,name='muc#roominfo_subject'  ,typ='text-single'),
+                    DataField(label='Number of occupants',name='muc#roominfo_occupants',typ='text-single')])
+                form = DataForm(typ='result')
+                form.setPayload([reported])
+                q.addChild(node=form)
+                conn = self.users[fromjid][server]
+                pendingop_push(conn, 'list', self.irc_list_search, rep)
+                conn.list([name.encode(conn.charset,'replace')])
+                raise NodeProcessed
+        self.jabber.send(Error(event,ERR_REGISTRATION_REQUIRED))
+        raise NodeProcessed
+
     #IRC methods
     def irc_doquit(self,conn,message=None):
         server = conn.server
@@ -1438,6 +1536,7 @@ class Transport:
             conn.xresources = {}
             conn.channels = {}
             conn.pendingoperations = {}
+            conn.allpendingoperations = []
             conn.activechats = {}
             conn.away = ''
             conn.charset = ucharset
@@ -1969,7 +2068,10 @@ class Transport:
         if not pendingop_call(conn, 'list', event):
             self.irc_rawtext(conn,'list',event,' '.join(event.arguments()))
 
-    def irc_list_items(self,conn,rep,event):
+    def irc_list_items(self,conn,event,op,rep):
+        if op == 'fail':
+            self.jabber.send(Error(rep,ERR_RESOURCE_CONSTRAINT,reply=0))
+            return True
         chan = event.arguments()[0]
         if irclib.is_channel(chan):
             chan = unicode(chan,conn.charset,'replace')
@@ -1977,7 +2079,10 @@ class Transport:
             q.addChild('item',{'name':chan,'jid':'%s%%%s@%s' % (JIDEncode(chan), conn.server, config.jid)})
         return True
 
-    def irc_list_info(self,conn,rep,event):
+    def irc_list_info(self,conn,event,op,rep):
+        if op == 'fail':
+            self.jabber.send(Error(rep,ERR_RESOURCE_CONSTRAINT,reply=0))
+            return True
         chan = event.arguments()[0]
         if irclib.is_channel(chan):
             membercount = event.arguments()[1]
@@ -1992,12 +2097,35 @@ class Transport:
             q.addChild(node=form)
         return True
 
+    def irc_list_search(self,conn,event,op,rep):
+        if op == 'fail':
+            self.jabber.send(Error(rep,ERR_RESOURCE_CONSTRAINT,reply=0))
+            return True
+        chan = event.arguments()[0]
+        if irclib.is_channel(chan):
+            membercount = event.arguments()[1]
+            line,xhtml = colourparse(event.arguments()[2],conn.charset)
+            chan = unicode(chan,conn.charset,'replace')
+            q=rep.getTag('query')
+            form = q.getTag('x',namespace=NS_DATA)
+            item = Node('item',payload=[
+                DataField(name='jid'                   ,value='%s%%%s@%s' % (JIDEncode(chan), conn.server, config.jid)),
+                DataField(name='name'                  ,value=chan),
+                DataField(name='muc#roominfo_subject'  ,value=line),
+                DataField(name='muc#roominfo_occupants',value=membercount)])
+            form.addChild(node=item)
+        return True
+
     def irc_listend(self,conn,event):
         rep = pendingop_pop(conn,'list')
         if rep:
             self.jabber.send(rep)
         else:
             self.irc_rawtext(conn,'list',event,' '.join(event.arguments()))
+
+    def irc_tryagain(self,conn,event):
+        if not pendingop_fail(conn, event):
+            self.irc_rawtext(conn,conn.get_server_name(),event,' '.join(event.arguments()))
 
     def irc_motdstart(self,conn,event):
         try:
@@ -2294,7 +2422,7 @@ if __name__ == '__main__':
                     sys.exc_clear()
                 except:
                     logError()
-                if not connection.isConnected(): transport.xmpp_disconnect(connection)
+                if not connection.isConnected(): transport.xmpp_disconnect()
             elif socketlist[each] == 'irc':
                 try:
                     ircobj.process_data([each])
