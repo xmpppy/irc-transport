@@ -291,6 +291,7 @@ class Transport:
         self.irc.add_global_handler('whoisidle',self.irc_whoisidle)
         self.irc.add_global_handler('whoischannels',self.irc_whoischannels)
         self.irc.add_global_handler('endofwhois',self.irc_endofwhois)
+        self.irc.add_global_handler('liststart',self.irc_list)
         self.irc.add_global_handler('list',self.irc_list)
         self.irc.add_global_handler('listend',self.irc_listend)
         self.irc.add_global_handler('tryagain',self.irc_tryagain)
@@ -2045,6 +2046,7 @@ class Transport:
             self.irc_rawtext(conn,'list',event,' '.join(event.arguments()))
 
     def irc_list_items(self,conn,event,op,rep):
+        if event.eventtype() == 'liststart': pass
         if op == 'fail':
             self.jabber.send(Error(rep,ERR_RESOURCE_CONSTRAINT,reply=0))
             return True
@@ -2056,6 +2058,7 @@ class Transport:
         return True
 
     def irc_list_info(self,conn,event,op,rep):
+        if event.eventtype() == 'liststart': pass
         if op == 'fail':
             self.jabber.send(Error(rep,ERR_RESOURCE_CONSTRAINT,reply=0))
             return True
@@ -2074,6 +2077,7 @@ class Transport:
         return True
 
     def irc_list_search(self,conn,event,op,rep):
+        if event.eventtype() == 'liststart': pass
         if op == 'fail':
             self.jabber.send(Error(rep,ERR_RESOURCE_CONSTRAINT,reply=0))
             return True
