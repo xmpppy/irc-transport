@@ -47,7 +47,7 @@ charsets = ['','ascii','big5','big5hkscs','cp037','cp424','cp437','cp500','cp737
 irccolour = ['#FFFFFF','#000000','#0000FF','#00FF00','#FF0000','#F08000','#8000FF','#FFF000','#FFFF00','#80FF00','#00FF80','#00FFFF','#0080FF','#FF80FF','#808080','#A0A0A0']
 
 def colourparse(str,charset):
-    # Each tuple consists of String, foreground, background, bold.
+    # Each tuple consists of String, foreground, background, bold, underline, italic.
     #str = str.replace('/','//')
     foreground=None
     background=None
@@ -120,10 +120,15 @@ def colourparse(str,charset):
             bold = None
             underline = None
             hs = ''
-        elif e in ['\x00', '\x01', '\x04', '\x05', '\x06', '\x07', '\x08', '\x09', '\x0a', '\x0b', '\x0c', '\x0d', '\x0e']:
+        elif e in ['\x00', '\x01', '\x04', '\x05', '\x06', '\x07', '\x08', '\x09', '\x0b', '\x0c', '\x0d', '\x0e']:
             if config.dumpProtocol: print 'Odd Escape'
         elif e in ['\x10', '\x11', '\x12', '\x13', '\x14', '\x15', '\x17', '\x18', '\x19', '\x1a', '\x1b', '\x1c', '\x1e']:
             if config.dumpProtocol: print 'Other Escape'
+        elif e == '\x0a': # New line
+            html.append((hs,foreground,background,bold,underline,italic))
+            html.append(('\x0a',foreground,background,bold,underline,italic))
+            s = '%s%s'%(s,e)
+            hs = ''
         else:
             s = '%s%s'%(s,e)
             hs = '%s%s'%(hs,e)
@@ -132,11 +137,11 @@ def colourparse(str,charset):
     try:
         s = unicode(s,'utf8','strict') # Language detection stuff should go here.
         for each in html:
-            chtml.append((unicode(each[0],'utf-8','strict'),each[1],each[2],each[3],each[4],each[5]))
+            chtml.append((unicode(each[0],'utf-8','strict').replace(u'  ', u' \xa0'),each[1],each[2],each[3],each[4],each[5]))
     except:
         s = unicode(s, charset,'replace')
         for each in html:
-            chtml.append((unicode(each[0],charset,'replace'),each[1],each[2],each[3],each[4],each[5]))
+            chtml.append((unicode(each[0],charset,'replace').replace(u'  ', u' \xa0'),each[1],each[2],each[3],each[4],each[5]))
     if len(chtml) > 1:
         html = Node('html')
         html.setNamespace('http://jabber.org/protocol/xhtml-im')
@@ -158,7 +163,9 @@ def colourparse(str,charset):
             if each[5]:
                 style = '%sfont-style:italic;'%style
             if each[0] != '':
-                if style == '':
+                if each[0] == '\x0a':
+                    xhtml.addChild('br')
+                elif style == '':
                     xhtml.addData(each[0])
                 else:
                     xhtml.addChild(name = 'span', attrs = {'style':style},payload=each[0])
@@ -244,6 +251,7 @@ class Transport:
         self.irc = irc
 
     def register_handlers(self):
+        # http://www.alien.net.au/irc/irc2numerics.html
         self.irc.add_global_handler('motd',self.irc_motd)
         self.irc.add_global_handler('motdstart',self.irc_motdstart)
         self.irc.add_global_handler('endofmotd',self.irc_endofmotd)
@@ -2108,39 +2116,54 @@ class Transport:
             self.irc_rawtext(conn,conn.get_server_name(),event,' '.join(event.arguments()))
 
     def irc_motdstart(self,conn,event):
-        try:
-            nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
-        except:
-            nick = conn.server
-            sys.exc_clear()
-        line,xhtml = colourparse(event.arguments()[0],conn.charset)
-        if line[-3:] == ' - ': line = line[:-3]
-        if line[:2] == '- ': line = line[2:]
-        #TODO: resource handling? conn.joinresource? what about adhoc?
-        m = Message(to=conn.fromjid,subject=line,typ='headline',frm='%s@%s/%s' %(conn.server, config.jid,nick))
-        conn.pendingoperations["motd"] = m
+        if not pendingop_call(conn, 'motd', event):
+            try:
+                nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
+            except:
+                nick = conn.server
+                sys.exc_clear()
+            #TODO: resource handling? conn.joinresource? what about adhoc?
+            m = Message(to=conn.fromjid,frm='%s@%s/%s' %(conn.server, config.jid,nick))
+            m.ircbody = None
+            pendingop_push(conn, 'motd', self.irc_motd_line, m)
+            if not pendingop_call(conn, 'motd', event):
+                self.irc_rawtext(conn,'motd',event,' '.join(event.arguments()))
 
     def irc_motd(self,conn,event):
-        line,xhtml = colourparse(event.arguments()[0],conn.charset)
+        if not pendingop_call(conn, 'motd', event):
+            self.irc_rawtext(conn,'motd',event,' '.join(event.arguments()))
+
+    def irc_motd_line(self,conn,event,op,msg):
+        if event.eventtype() == 'motdstart':
+            line,xhtml = colourparse(event.arguments()[0],conn.charset)
+            if line[-3:] == ' - ': line = line[:-3]
+            if line[:2] == '- ': line = line[2:]
+            msg.setSubject(line)
+            return True
+        line = event.arguments()[0]
         if line[:2] == '- ': line = line[2:]
-        m = conn.pendingoperations["motd"]
-        if m.getBody():
-            body = m.getBody() + '\x0a'
+        if msg.ircbody:
+            body = msg.ircbody + '\x0a'
         else:
             body = ''
-        m.setBody(body + line)
+        msg.ircbody = body + line
+        return True
 
     def irc_endofmotd(self,conn,event):
-        m = conn.pendingoperations["motd"]
-        del conn.pendingoperations["motd"]
-        #motdhash = md5.new(m.getBody()).hexdigest()
-        #if motdhash != conn.motdhash:
-        #  conn.motdhash = motdhash
-        #  if userfile.has_key(conn.fromjid) \
-        #    and userfile[conn.fromjid].has_key('servers') \
-        #    and userfile[conn.fromjid]['servers'].has_key(conn.server):
-        #      userfile[conn.fromjid]['servers'][conn.server]['motdhash'] = motdhash
-        self.jabber.send(m)
+        msg = pendingop_pop(conn,'motd')
+        if msg:
+            line,xhtml = colourparse(msg.ircbody,conn.charset)
+            #motdhash = md5.new(line).hexdigest()
+            #if motdhash != conn.motdhash:
+            #  conn.motdhash = motdhash
+            #  if userfile.has_key(conn.fromjid) \
+            #    and userfile[conn.fromjid].has_key('servers') \
+            #    and userfile[conn.fromjid]['servers'].has_key(conn.server):
+            #      userfile[conn.fromjid]['servers'][conn.server]['motdhash'] = motdhash
+            msg = Message(to=msg.getTo(),subject=msg.getSubject(),typ='headline',frm=msg.getFrom(),body=line,payload = [xhtml])
+            self.jabber.send(msg)
+        else:
+            self.irc_rawtext(conn,'motd',event,' '.join(event.arguments()))
 
     def irc_rawtext(self,conn,resource,event,msg):
         frm = '%s@%s/%s' %(conn.server,config.jid,resource)
