@@ -52,118 +52,92 @@ def colourparse(str,charset):
     foreground=None
     background=None
     bold=None
-    underline = None
+    underline=None
+    italic=None
     s = ''
     html=[]
     hs = ''
     ctrseq=None
     ctrfor=None #Has forground been processed?
     for e in str:
-        if e == '\x00':
-            pass #'Black'
-        elif e == '\x01':
-            pass #'Blue' CtCP Code
-        elif e == '\x02':#'Green' Also Bold
-            html.append((hs,foreground,background,bold,underline))
+        if ctrseq == True:
+            if e.isdigit():
+                if not ctrfor:
+                    if not foreground: foreground = ''
+                    if len(foreground) < 2:
+                        foreground += e
+                    else:
+                        ctrseq=None
+                else:
+                    if not background: background = ''
+                    if len(background) < 2:
+                        background += e
+                    else:
+                        ctrseq=None
+                        ctrfor=None
+            elif e == ',':
+                ctrfor=True
+                background = None
+            else:
+                if not foreground and not ctrfor: background = None
+                ctrfor = None
+                ctrseq = None
+        if ctrseq == True:
+            pass
+        elif e == '\x02': # Bold
+            html.append((hs,foreground,background,bold,underline,italic))
             if bold == True:
                 bold = None
             else:
                 bold = True
             hs = ''
-        elif e == '\x03':#'Cyan' Also Colour
-            html.append((hs,foreground,background,bold,underline))
+        elif e == '\x12': # Reverse
+            if config.dumpProtocol: print 'Reverse'
+        elif e == '\x16' or e == '\x1d': # Deprecated Italic or Italic
+            html.append((hs,foreground,background,bold,underline,italic))
+            if italic == True:
+                italic = None
+            else:
+                italic = True
+            hs = ''
+        elif e == '\x1f': # Underline
+            html.append((hs,foreground,background,bold,underline,italic))
+            if underline == True:
+                underline = None
+            else:
+                underline = True
+            hs = ''
+        elif e == '\x03': # Colour Code
+            html.append((hs,foreground,background,bold,underline,italic))
             foreground = None
-            #background = None
             if not ctrseq:
                 ctrseq = True
             hs = ''
-        elif e == '\x04':
-            if config.dumpProtocol: print 'Red'
-        elif e == '\x05':
-            if config.dumpProtocol: print 'Purple'
-        elif e == '\x06':
-            if config.dumpProtocol: print 'Brown'
-        elif e == '\x07':
-            if config.dumpProtocol: print "Light Grey"
-        elif e == '\x08':
-            if config.dumpProtocol: print 'Grey'
-        elif e == '\x09':
-            if config.dumpProtocol: print 'Light Blue'
-        elif e == '\x0a':
-            if config.dumpProtocol: print 'Light Green'
-        elif e == '\x0b':
-            if config.dumpProtocol: print 'Light Cyan'
-        elif e == '\x0c':
-            if config.dumpProtocol: print 'Light Red'
-        elif e == '\x0d':
-            if config.dumpProtocol: print 'Pink'
-        elif e == '\x0e':
-            if config.dumpProtocol: print 'Yellow'
-        elif e == '\x0f':
-            #go back to normal
-            html.append((hs,foreground,background,bold,underline))
+        elif e == '\x0f': # Normal
+            html.append((hs,foreground,background,bold,underline,italic))
             foreground = None
             background = None
             bold = None
             underline = None
             hs = ''
-            #if config.dumpProtocol: print 'White'
-        elif e == '\x1f':
-            html.append((hs,foreground,background,bold,underline))
-            if bold == True:
-                bold = None
-            else:
-                bold = True
-            hs = ''
-        elif e in ['\x10', '\x11', '\x12', '\x13', '\x14', '\x15', '\x16', '\x17', '\x18', '\x19', '\x1a', '\x1b', '\x1c', '\x1d', '\x1e']:
+        elif e in ['\x00', '\x01', '\x04', '\x05', '\x06', '\x07', '\x08', '\x09', '\x0a', '\x0b', '\x0c', '\x0d', '\x0e']:
+            if config.dumpProtocol: print 'Odd Escape'
+        elif e in ['\x10', '\x11', '\x12', '\x13', '\x14', '\x15', '\x17', '\x18', '\x19', '\x1a', '\x1b', '\x1c', '\x1e']:
             if config.dumpProtocol: print 'Other Escape'
-        elif ctrseq == True:
-            if e.isdigit():
-                if not ctrfor:
-                    try:
-                        if not foreground.len() <2:
-                            foreground = foreground +e
-                        else:
-                            ctrseq=None
-                            foreground = int(foreground)
-                            s = '%s%s'%(s,e)
-                            hs = '%s%s'%(hs,e)
-                    except AttributeError:
-                        foreground = e
-                else:
-                    try:
-                        if background.len() <=2:
-                            foreground = foreground +e
-                        else:
-                            ctrseq=None
-                            ctrfor=None
-                            background = int(background)
-                            s = '%s%s'%(s,e)
-                            hs= '%s%s'%(hs,e)
-                    except AttributeError:
-                        background = e
-            elif e == ',':
-                ctrfor=True
-                background = None
-            else:
-                ctrfor = None
-                ctrseq = None
-                s = '%s%s'%(s,e)
-                hs = '%s%s'%(hs,e)
         else:
             s = '%s%s'%(s,e)
             hs = '%s%s'%(hs,e)
-    html.append((hs,foreground,background,bold,underline))
+    html.append((hs,foreground,background,bold,underline,italic))
     chtml = []
     try:
         s = unicode(s,'utf8','strict') # Language detection stuff should go here.
         for each in html:
-            chtml.append((unicode(each[0],'utf-8','strict'),each[1],each[2],each[3],each[4]))
+            chtml.append((unicode(each[0],'utf-8','strict'),each[1],each[2],each[3],each[4],each[5]))
     except:
         s = unicode(s, charset,'replace')
         for each in html:
-            chtml.append((unicode(each[0],charset,'replace'),each[1],each[2],each[3],each[4]))
-    if len(chtml) >1:
+            chtml.append((unicode(each[0],charset,'replace'),each[1],each[2],each[3],each[4],each[5]))
+    if len(chtml) > 1:
         html = Node('html')
         html.setNamespace('http://jabber.org/protocol/xhtml-im')
         xhtml = html.addChild('body',namespace='http://www.w3.org/1999/xhtml')
@@ -172,7 +146,7 @@ def colourparse(str,charset):
             style = ''
             if each[1] != None and int(each[1])<16:
                 foreground = irccolour[int(each[1])]
-                if config.dumpProtocol: print foreground
+                #if config.dumpProtocol: print foreground
                 style = '%scolor:%s;'%(style,foreground)
             if each[2] != None and int(each[2])<16:
                 background = irccolour[int(each[2])]
@@ -181,6 +155,8 @@ def colourparse(str,charset):
                 style = '%sfont-weight:bold;'%style
             if each[4]:
                 style = '%stext-decoration:underline;'%style
+            if each[5]:
+                style = '%sfont-style:italic;'%style
             if each[0] != '':
                 if style == '':
                     xhtml.addData(each[0])
