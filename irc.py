@@ -341,11 +341,14 @@ class Transport:
         if to == config.jid:
             if node == None:
                 if type == 'info':
+                    features = [NS_DISCO_INFO,NS_DISCO_ITEMS,NS_VERSION,NS_MUC,NS_COMMANDS]
+                    if config.allowRegister or userfile.has_key(fromjid):
+                        features = [NS_REGISTER] + features
                     return {
                         'ids':[
                             {'category':'conference','type':'irc','name':VERSTR},
                             {'category':'gateway','type':'irc','name':VERSTR}],
-                        'features':[NS_DISCO_INFO,NS_DISCO_ITEMS,NS_REGISTER,NS_VERSION,NS_MUC,NS_COMMANDS]}
+                        'features':features}
                 if type == 'items':
                     list = [
                         {'node':NODE_REGISTERED_SERVERS,'name':config.discoName + ' Registered Servers','jid':config.jid},
@@ -1086,6 +1089,9 @@ class Transport:
                     serverdetails = servers[server]
                     charset = serverdetails['charset']
             queryPayload += [Node('registered')]
+        else:
+            if not config.allowRegister:
+                return
 
         if server:
             nametype='hidden'
@@ -1182,6 +1188,8 @@ class Transport:
             if userfile.has_key(fromjid):
                 conf = userfile[fromjid]
             else:
+                if not config.allowRegister:
+                    return
                 conf = {}
             try:
                 codecs.lookup(ucharset)
