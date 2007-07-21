@@ -44,6 +44,8 @@ NODE_ADMIN_ONLINE_SERVERS='online-servers'
 
 # This is the list of charsets that python supports.  Detecting this list at runtime is really difficult, so it's hardcoded here.
 charsets = ['','ascii','big5','big5hkscs','cp037','cp424','cp437','cp500','cp737','cp775','cp850','cp852','cp855','cp856','cp857','cp860','cp861','cp862','cp863','cp864','cp865','cp866','cp869','cp874','cp875','cp932','cp949','cp950','cp1006','cp1026','cp1140','cp1250','cp1251','cp1252','cp1253','cp1254','cp1255','cp1256','cp1257','cp1258','euc-jp','euc-jis-2004','euc-jisx0213','euc-kr','gb2312','gbk','gb18030','hz','iso2022-jp','iso2022-jp-1','iso2022-jp-2','iso2022-jp-2004','iso2022-jp-3','iso2022-jp-ext','iso2022-kr','latin-1','iso8859-1','iso8859-2','iso8859-3','iso8859-4','iso8859-5','iso8859-6','iso8859-7','iso8859-8','iso8859-9','iso8859-10','iso8859-13','iso8859-14','iso8859-15','johab','koi8-r','koi8-u','mac-cyrillic','mac-greek','mac-iceland','mac-latin2','mac-roman','mac-turkish','ptcp154','shift-jis','shift-jis-2004','shift-jisx0213','utf-16','utf-16-be','utf-16-le','utf-7','utf-8']
+nonbreakingre1 = re.compile(u'(.) (?=(?:  )*$)')    # any char followed by a space (and followed by an even number of spaces and then the end of the string)
+nonbreakingre2 = re.compile(u'(^| ) ')        # start of string, or any two spaces
 irccolour = ['#FFFFFF','#000000','#0000FF','#00FF00','#FF0000','#F08000','#8000FF','#FFF000','#FFFF00','#80FF00','#00FF80','#00FFFF','#0080FF','#FF80FF','#808080','#A0A0A0']
 
 def colourparse(str,charset):
@@ -126,7 +128,7 @@ def colourparse(str,charset):
             if config.dumpProtocol: print 'Other Escape'
         elif e == '\x0a': # New line
             html.append((hs,foreground,background,bold,underline,italic))
-            html.append(('\x0a',foreground,background,bold,underline,italic))
+            html.append(('\x0a',None,None,None,None,None))
             s = '%s%s'%(s,e)
             hs = ''
         else:
@@ -137,11 +139,11 @@ def colourparse(str,charset):
     try:
         s = unicode(s,'utf8','strict') # Language detection stuff should go here.
         for each in html:
-            chtml.append((unicode(each[0],'utf-8','strict').replace(u'  ', u' \xa0'),each[1],each[2],each[3],each[4],each[5]))
-    except:
-        s = unicode(s, charset,'replace')
+            chtml.append((nonbreakingre2.sub(u'\\1\xa0', nonbreakingre1.sub(u'\\1\xa0', unicode(each[0],'utf-8','strict'))),each[1],each[2],each[3],each[4],each[5]))
+    except UnicodeDecodeError:
+        s = unicode(s,charset,'replace')
         for each in html:
-            chtml.append((unicode(each[0],charset,'replace').replace(u'  ', u' \xa0'),each[1],each[2],each[3],each[4],each[5]))
+            chtml.append((nonbreakingre2.sub(u'\\1\xa0', nonbreakingre1.sub(u'\\1\xa0', unicode(each[0],charset,'replace'))),each[1],each[2],each[3],each[4],each[5]))
     if len(chtml) > 1:
         html = Node('html')
         html.setNamespace('http://jabber.org/protocol/xhtml-im')
