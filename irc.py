@@ -9,7 +9,7 @@ version = 'CVS ' + '$Revision$'.split()[1]
 # This program is free software licensed with the GNU Public License Version 2.
 # For a full copy of the license please go here http://www.gnu.org/licenses/licenses.html#GPL
 
-import codecs, ConfigParser, os, platform, re, select, shelve, signal, socket, sys, time, traceback
+import codecs, ConfigParser, md5, os, platform, re, select, shelve, signal, socket, sys, time, traceback
 import irclib, xmpp.client
 from xmpp.protocol import *
 from xmpp.browser import *
@@ -1488,6 +1488,7 @@ class Transport:
         username = realname = nick
         ucharset = config.charset
         motdhash = ''
+        ruleshash = ''
         if userfile.has_key(fromstripped):
             ucharset = userfile[fromstripped]['charset']
             if userfile[fromstripped].has_key('servers'):
@@ -1507,6 +1508,8 @@ class Transport:
                         realname = serverdetails['realname']
                     if serverdetails.has_key('motdhash'):
                         motdhash = serverdetails['motdhash']
+                    if serverdetails.has_key('ruleshash'):
+                        ruleshash = serverdetails['ruleshash']
 
         if not nick:
             return None
@@ -1539,10 +1542,11 @@ class Transport:
             conn.isonlist = []
             conn.isontimer = None
             conn.motdhash = motdhash
-            self.jabber.send(Presence(to=frm, frm = '%s@%s' % (server, config.jid), status='Connecting...'))
+            conn.ruleshash = ruleshash
+            self.jabber.send(Presence(to=fromjid, frm = '%s@%s' % (server, config.jid), status='Connecting...'))
             return conn
         except irclib.ServerConnectionError:
-            self.jabber.send(Error(Presence(to = frm, frm = '%s%%%s@%s/%s' % (channel,server,config.jid,nick)),ERR_SERVICE_UNAVAILABLE,reply=0))  # Other candidates: ERR_GONE, ERR_REMOTE_SERVER_NOT_FOUND, ERR_REMOTE_SERVER_TIMEOUT
+            self.jabber.send(Error(Presence(to = fromjid, frm = '%s%%%s@%s/%s' % (channel,server,config.jid,nick)),ERR_SERVICE_UNAVAILABLE,reply=0))  # Other candidates: ERR_GONE, ERR_REMOTE_SERVER_NOT_FOUND, ERR_REMOTE_SERVER_TIMEOUT
             return None
 
     def irc_newroom(self,conn,channel):
@@ -2144,7 +2148,7 @@ class Transport:
             self.irc_rawtext(conn,'motd',event,' '.join(event.arguments()))
 
     def irc_motd_line(self,conn,event,op,msg):
-        if event.eventtype() == 'motdstart':
+        if event.eventtype() == 'motdstart' or event.eventtype() == '308':
             line,xhtml = colourparse(event.arguments()[0],conn.charset)
             if line[-3:] == ' - ': line = line[:-3]
             if line[:2] == '- ': line = line[2:]
@@ -2153,25 +2157,33 @@ class Transport:
         line = event.arguments()[0]
         if line[:2] == '- ': line = line[2:]
         if msg.ircbody:
-            body = msg.ircbody + '\x0a'
+            msg.ircbody = msg.ircbody + '\x0a' + line
+            msg.hashbody = msg.hashbody + '\x0a' + line
         else:
-            body = ''
-        msg.ircbody = body + line
+            msg.ircbody = line
+            msg.hashbody = ''
         return True
 
     def irc_endofmotd(self,conn,event):
         msg = pendingop_pop(conn,'motd')
         if msg:
             line,xhtml = colourparse(msg.ircbody,conn.charset)
-            #motdhash = md5.new(line).hexdigest()
-            #if motdhash != conn.motdhash:
-            #  conn.motdhash = motdhash
-            #  if userfile.has_key(conn.fromjid) \
-            #    and userfile[conn.fromjid].has_key('servers') \
-            #    and userfile[conn.fromjid]['servers'].has_key(conn.server):
-            #      userfile[conn.fromjid]['servers'][conn.server]['motdhash'] = motdhash
-            msg = Message(to=msg.getTo(),subject=msg.getSubject(),typ='headline',frm=msg.getFrom(),body=line,payload = [xhtml])
-            self.jabber.send(msg)
+            motdhash = md5.new(msg.hashbody).hexdigest()
+            if event.eventtype() == '309':
+                hashfield = 'ruleshash'
+            else:
+                hashfield = 'motdhash'
+            if motdhash != getattr(conn, hashfield):
+              setattr(conn, hashfield, motdhash)
+              if userfile.has_key(conn.fromjid):
+                user = userfile[conn.fromjid]
+                if user.has_key('servers') \
+                  and user['servers'].has_key(conn.server):
+                  user['servers'][conn.server][hashfield] = motdhash
+                  userfile[conn.fromjid] = user
+                  userfile.sync()
+              msg = Message(to=msg.getTo(),subject=msg.getSubject(),typ='headline',frm=msg.getFrom(),body=line,payload = [xhtml])
+              self.jabber.send(msg)
         else:
             self.irc_rawtext(conn,'motd',event,' '.join(event.arguments()))
 
