@@ -343,7 +343,9 @@ class Transport:
         if to == config.jid:
             if node == None:
                 if type == 'info':
-                    features = [NS_DISCO_INFO,NS_DISCO_ITEMS,NS_VERSION,NS_MUC,NS_COMMANDS]
+                    features = [NS_DISCO_INFO,NS_DISCO_ITEMS,NS_VERSION,NS_COMMANDS]
+                    if not config.requireRegister or userfile.has_key(fromjid):
+                        features = [NS_MUC] + features
                     if config.allowRegister or userfile.has_key(fromjid):
                         features = [NS_REGISTER] + features
                     return {
@@ -1084,7 +1086,8 @@ class Transport:
 
         serverdetails = {'address':'','nick':'','password':'','realname':'','username':''}
         if userfile.has_key(fromjid):
-            charset = userfile[fromjid]['charset']
+            if userfile[fromjid].has_key('charset'):
+                charset = userfile[fromjid]['charset']
             if not server == '' and userfile[fromjid].has_key('servers'):
                 servers = userfile[fromjid]['servers']
                 if servers.has_key(server):
@@ -1490,7 +1493,8 @@ class Transport:
         motdhash = ''
         ruleshash = ''
         if userfile.has_key(fromstripped):
-            ucharset = userfile[fromstripped]['charset']
+            if userfile[fromstripped].has_key('charset'):
+                ucharset = userfile[fromstripped]['charset']
             if userfile[fromstripped].has_key('servers'):
                 servers = userfile[fromstripped]['servers']
                 if servers.has_key(server):
@@ -1510,6 +1514,10 @@ class Transport:
                         motdhash = serverdetails['motdhash']
                     if serverdetails.has_key('ruleshash'):
                         ruleshash = serverdetails['ruleshash']
+        else:
+            if config.requireRegister:
+                self.jabber.send(Error(Presence(to = fromjid, frm = '%s%%%s@%s/%s' % (channel,server,config.jid,nick)),ERR_REGISTRATION_REQUIRED,reply=0))
+                return None
 
         if not nick:
             return None

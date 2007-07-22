@@ -17,6 +17,7 @@ port = "5347"
 secret = "secret"
 
 allowRegister = False
+requireRegister = False
 
 activityMessages = False # For displaying user acitivity messages
 

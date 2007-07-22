@@ -44,6 +44,9 @@
     <!-- Allow users to register with this transport -->
     <allowRegister/>
 
+    <!-- Require users to be registered before allowing them to join a room -->
+    <!-- <requireRegister/> -->
+
     <!-- Send activity messages to users (for clients that don't support MUC)  -->
     <activityMessages/>
 
