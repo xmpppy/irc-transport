@@ -1,18 +1,20 @@
 
-# Service administration commands Jep-0133 for the xmpppy based transports written by Mike Albon
+# Service administration commands XEP-0133 for the xmpppy based transports written by Mike Albon
 import xmpp, string
 from xmpp.protocol import *
 import xmpp.commands
 import config
 from xml.dom.minidom import parse
 
-"""This file is the JEP-0133 commands that are applicable to the transports.
+"""This file is the XEP-0133 commands that are applicable to the transports.
 
 Implemented commands as follows:
 
-4.18. Registered_Users_Command: Return a list of Registered Users
-4.20. Online_Users_Command: Return a list of Online Users
-4.21. Active_Users_Command: Return a list of Active Users
+4.1.  Add_User_Command: 
+4.2.  Delete_User_Command: 
+4.18. List_Registered_Users_Command: Return a list of Registered Users
+4.20. List_Online_Users_Command: Return a list of Online Users
+4.21. List_Active_Users_Command: Return a list of Active Users
 4.29. Edit_Admin_List_Command: Edit the Administrators list
 4.30. Restart_Service_Command: Restarts the Service
 4.31. Shutdown_Service_Command: Shuts down the Service
@@ -20,18 +22,17 @@ Implemented commands as follows:
 
 """
 
-class Online_Users_Command(xmpp.commands.Command_Handler_Prototype):
-    """This is the online users command as documented in section 4.20 of JEP-0133.
-    At the current time, no provision is made for splitting the userlist into sections"""
-    name = NS_ADMIN_ONLINE_USERS_LIST
-    description = 'Get List of Online Users'
-    discofeatures = [xmpp.commands.NS_COMMANDS,xmpp.NS_DATA]
+class Add_User_Command(xmpp.commands.Command_Handler_Prototype):
+    """This is the add user command as documented in section 4.1 of XEP-0133."""
+    name = NS_ADMIN_ADD_USER
+    description = 'Add User'
+    discofeatures = [xmpp.commands.NS_COMMANDS, xmpp.NS_DATA]
 
-    def __init__(self,users,jid=''):
+    def __init__(self,userfile,jid=''):
         """Initialise the command object"""
         xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
-        self.initial = { 'execute':self.cmdFirstStage }
-        self.users = users
+        self.initial = {'execute':self.cmdFirstStage }
+        self.userfile = userfile
 
     def _DiscoHandler(self,conn,request,type):
         """The handler for discovery events"""
@@ -41,28 +42,62 @@ class Online_Users_Command(xmpp.commands.Command_Handler_Prototype):
             return None
 
     def cmdFirstStage(self,conn,request):
-        """Build the reply to complete the request"""
+        """Set the session ID, and return the form containing the user's jid"""
         if request.getFrom().getStripped() in config.admins:
-            reply = request.buildReply('result')
-            form = DataForm(typ='result',data=[DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='The list of online users',name='onlineuserjids',value=self.users.keys(),typ='jid-multi')])
-            reply.addChild(name='command',namespace=NS_COMMANDS,attrs={'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
-            self._owner.send(reply)
+           # Setup session ready for form reply
+           session = self.getSessionID()
+           self.sessions[session] = {'jid':request.getFrom(),'actions':{'cancel':self.cmdCancel,'next':self.cmdSecondStage,'execute':self.cmdSecondStage}}
+           # Setup form with existing data in
+           reply = request.buildReply('result')
+           form = DataForm(title='Adding a User',data=['Fill out this form to add a user', DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='The Jabber ID for the account to be added', typ='jid-single', name='accountjid')])
+           replypayload = [Node('actions',attrs={'execute':'next'},payload=[Node('next')]),form]
+           reply.addChild(name='command',namespace=NS_COMMANDS,attrs={'node':request.getTagAttr('command','node'),'sessionid':session,'status':'executing'},payload=replypayload)
+           self._owner.send(reply)
         else:
-            self._owner.send(Error(request,ERR_FORBIDDEN))
+           self._owner.send(Error(request,ERR_FORBIDDEN))
         raise NodeProcessed
 
-class Active_Users_Command(xmpp.commands.Command_Handler_Prototype):
-    """This is the active users command as documented in section 4.21 of JEP-0133.
-    At the current time, no provision is made for splitting the userlist into sections"""
-    name = NS_ADMIN_ACTIVE_USERS_LIST
-    description = 'Get List of Active Users'
-    discofeatures = [xmpp.commands.NS_COMMANDS,xmpp.NS_DATA]
+    def cmdSecondStage(self,conn,request):
+        """Apply and save the config"""
+        form = DataForm(node=request.getTag(name='command').getTag(name='x',namespace=NS_DATA))
+        session = request.getTagAttr('command','sessionid')
+        if self.sessions.has_key(session):
+            if self.sessions[session]['jid'] == request.getFrom():
+                reply = request.buildReply('result')
+                fromstripped = form.getField('accountjid').getValue().encode('utf8')
+                if not self.userfile.has_key(fromstripped):
+                    self.userfile[fromstripped] = {}
+                    self.userfile.sync()
+                reply.addChild(name='command',namespace=NS_COMMANDS,attrs={'node':request.getTagAttr('command','node'),'sessionid':session,'status':'completed'})
+                self._owner.send(reply)
+            else:
+                self._owner.send(Error(request,ERR_BAD_REQUEST))
+        else:
+            self._owner.send(Error(request,ERR_BAD_REQUEST))   
+        raise NodeProcessed
 
-    def __init__(self,users,jid=''):
+    def cmdCancel(self,conn,request):
+        session = request.getTagAttr('command','sessionid')
+        if self.sessions.has_key(session):
+            del self.sessions[session]
+            reply = request.buildReply('result')
+            reply.addChild(name='command',namespace=NS_COMMANDS,attrs={'node':request.getTagAttr('command','node'),'sessionid':session,'status':'canceled'})
+            self._owner.send(reply)
+        else:
+            self._owner.send(Error(request,ERR_BAD_REQUEST))
+        raise NodeProcessed
+
+class Delete_User_Command(xmpp.commands.Command_Handler_Prototype):
+    """This is the delete user command as documented in section 4.1 of XEP-0133."""
+    name = NS_ADMIN_DELETE_USER
+    description = 'Delete User'
+    discofeatures = [xmpp.commands.NS_COMMANDS, xmpp.NS_DATA]
+
+    def __init__(self,userfile,jid=''):
         """Initialise the command object"""
         xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
-        self.initial = { 'execute':self.cmdFirstStage }
-        self.users = users
+        self.initial = {'execute':self.cmdFirstStage }
+        self.userfile = userfile
 
     def _DiscoHandler(self,conn,request,type):
         """The handler for discovery events"""
@@ -72,18 +107,53 @@ class Active_Users_Command(xmpp.commands.Command_Handler_Prototype):
             return None
 
     def cmdFirstStage(self,conn,request):
-        """Build the reply to complete the request"""
+        """Set the session ID, and return the form containing the user's jid"""
         if request.getFrom().getStripped() in config.admins:
-            reply = request.buildReply('result')
-            form = DataForm(typ='result',data=[DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='The list of active users',name='activeuserjids',value=self.users.keys(),typ='jid-multi')])
-            reply.addChild(name='command',namespace=NS_COMMANDS,attrs={'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
-            self._owner.send(reply)
+           # Setup session ready for form reply
+           session = self.getSessionID()
+           self.sessions[session] = {'jid':request.getFrom(),'actions':{'cancel':self.cmdCancel,'next':self.cmdSecondStage,'execute':self.cmdSecondStage}}
+           # Setup form with existing data in
+           reply = request.buildReply('result')
+           form = DataForm(title='Deleting a User',data=['Fill out this form to delete a user', DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='The Jabber ID for the account to be deleted', typ='jid-single', name='accountjid')])
+           replypayload = [Node('actions',attrs={'execute':'next'},payload=[Node('next')]),form]
+           reply.addChild(name='command',namespace=NS_COMMANDS,attrs={'node':request.getTagAttr('command','node'),'sessionid':session,'status':'executing'},payload=replypayload)
+           self._owner.send(reply)
         else:
-            self._owner.send(Error(request,ERR_FORBIDDEN))
+           self._owner.send(Error(request,ERR_FORBIDDEN))
         raise NodeProcessed
 
-class Registered_Users_Command(xmpp.commands.Command_Handler_Prototype):
-    """This is the active users command as documented in section 4.18 of JEP-0133.
+    def cmdSecondStage(self,conn,request):
+        """Apply and save the config"""
+        form = DataForm(node=request.getTag(name='command').getTag(name='x',namespace=NS_DATA))
+        session = request.getTagAttr('command','sessionid')
+        if self.sessions.has_key(session):
+            if self.sessions[session]['jid'] == request.getFrom():
+                reply = request.buildReply('result')
+                fromstripped = form.getField('accountjid').getValue().encode('utf8')
+                if self.userfile.has_key(fromstripped):
+                    del self.userfile[fromstripped]
+                    self.userfile.sync()
+                reply.addChild(name='command',namespace=NS_COMMANDS,attrs={'node':request.getTagAttr('command','node'),'sessionid':session,'status':'completed'})
+                self._owner.send(reply)
+            else:
+                self._owner.send(Error(request,ERR_BAD_REQUEST))
+        else:
+            self._owner.send(Error(request,ERR_BAD_REQUEST))   
+        raise NodeProcessed
+
+    def cmdCancel(self,conn,request):
+        session = request.getTagAttr('command','sessionid')
+        if self.sessions.has_key(session):
+            del self.sessions[session]
+            reply = request.buildReply('result')
+            reply.addChild(name='command',namespace=NS_COMMANDS,attrs={'node':request.getTagAttr('command','node'),'sessionid':session,'status':'canceled'})
+            self._owner.send(reply)
+        else:
+            self._owner.send(Error(request,ERR_BAD_REQUEST))
+        raise NodeProcessed
+
+class List_Registered_Users_Command(xmpp.commands.Command_Handler_Prototype):
+    """This is the registered users command as documented in section 4.18 of XEP-0133.
     At the current time, no provision is made for splitting the userlist into sections"""
     name = NS_ADMIN_REGISTERED_USERS_LIST
     description = 'Get List of Registered Users'
@@ -113,10 +183,72 @@ class Registered_Users_Command(xmpp.commands.Command_Handler_Prototype):
             self._owner.send(Error(request,ERR_FORBIDDEN))
         raise NodeProcessed
 
+class List_Online_Users_Command(xmpp.commands.Command_Handler_Prototype):
+    """This is the online users command as documented in section 4.20 of XEP-0133.
+    At the current time, no provision is made for splitting the userlist into sections"""
+    name = NS_ADMIN_ONLINE_USERS_LIST
+    description = 'Get List of Online Users'
+    discofeatures = [xmpp.commands.NS_COMMANDS,xmpp.NS_DATA]
+
+    def __init__(self,users,jid=''):
+        """Initialise the command object"""
+        xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
+        self.initial = { 'execute':self.cmdFirstStage }
+        self.users = users
+
+    def _DiscoHandler(self,conn,request,type):
+        """The handler for discovery events"""
+        if request.getFrom().getStripped() in config.admins:
+            return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,request,type)
+        else:
+            return None
+
+    def cmdFirstStage(self,conn,request):
+        """Build the reply to complete the request"""
+        if request.getFrom().getStripped() in config.admins:
+            reply = request.buildReply('result')
+            form = DataForm(typ='result',data=[DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='The list of online users',name='onlineuserjids',value=self.users.keys(),typ='jid-multi')])
+            reply.addChild(name='command',namespace=NS_COMMANDS,attrs={'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
+            self._owner.send(reply)
+        else:
+            self._owner.send(Error(request,ERR_FORBIDDEN))
+        raise NodeProcessed
+
+class List_Active_Users_Command(xmpp.commands.Command_Handler_Prototype):
+    """This is the active users command as documented in section 4.21 of XEP-0133.
+    At the current time, no provision is made for splitting the userlist into sections"""
+    name = NS_ADMIN_ACTIVE_USERS_LIST
+    description = 'Get List of Active Users'
+    discofeatures = [xmpp.commands.NS_COMMANDS,xmpp.NS_DATA]
+
+    def __init__(self,users,jid=''):
+        """Initialise the command object"""
+        xmpp.commands.Command_Handler_Prototype.__init__(self,jid)
+        self.initial = { 'execute':self.cmdFirstStage }
+        self.users = users
+
+    def _DiscoHandler(self,conn,request,type):
+        """The handler for discovery events"""
+        if request.getFrom().getStripped() in config.admins:
+            return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,request,type)
+        else:
+            return None
+
+    def cmdFirstStage(self,conn,request):
+        """Build the reply to complete the request"""
+        if request.getFrom().getStripped() in config.admins:
+            reply = request.buildReply('result')
+            form = DataForm(typ='result',data=[DataField(typ='hidden',name='FORM_TYPE',value=NS_ADMIN),DataField(desc='The list of active users',name='activeuserjids',value=self.users.keys(),typ='jid-multi')])
+            reply.addChild(name='command',namespace=NS_COMMANDS,attrs={'node':request.getTagAttr('command','node'),'sessionid':self.getSessionID(),'status':'completed'},payload=[form])
+            self._owner.send(reply)
+        else:
+            self._owner.send(Error(request,ERR_FORBIDDEN))
+        raise NodeProcessed
+
 
 class Edit_Admin_List_Command(xmpp.commands.Command_Handler_Prototype):
-    """This command enables the editing of the administrators list as documented in section 4.29 of JEP-0133.
-    (the users of JEP-0133 commands in this case)"""
+    """This command enables the editing of the administrators list as documented in section 4.29 of XEP-0133.
+    (the users of XEP-0133 commands in this case)"""
     name = NS_ADMIN_EDIT_ADMIN
     description = 'Edit Admin List'
     discofeatures = [xmpp.commands.NS_COMMANDS, xmpp.NS_DATA]
@@ -205,7 +337,7 @@ class Edit_Admin_List_Command(xmpp.commands.Command_Handler_Prototype):
 
 
 class Restart_Service_Command(xmpp.commands.Command_Handler_Prototype):
-    """This is the restart service command as documented in section 4.30 of JEP-0133."""
+    """This is the restart service command as documented in section 4.30 of XEP-0133."""
     name = NS_ADMIN_RESTART
     description = 'Restart Service'
     discofeatures = [xmpp.commands.NS_COMMANDS, xmpp.NS_DATA]
@@ -269,7 +401,7 @@ class Restart_Service_Command(xmpp.commands.Command_Handler_Prototype):
         raise NodeProcessed
 
 class Shutdown_Service_Command(xmpp.commands.Command_Handler_Prototype):
-    """This is the shutdown service command as documented in section 4.31 of JEP-0133."""
+    """This is the shutdown service command as documented in section 4.31 of XEP-0133."""
     name = NS_ADMIN_SHUTDOWN
     description = 'Shut Down Service'
     discofeatures = [xmpp.commands.NS_COMMANDS, xmpp.NS_DATA]
