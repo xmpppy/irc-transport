@@ -780,7 +780,7 @@ class Transport:
                         self.jabber.send(t)
             else:
                 self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))  # or MALFORMED_JID maybe?
-        elif type in ['chat', None]:
+        elif type in ['chat', 'normal', None]:
             if nick:
                 if conn.activechats.has_key(irc_ulower(nick)):
                     conn.activechats[irc_ulower(nick)] = [to,event.getFrom(),time.time(),conn.activechats[irc_ulower(nick)][3]]
