@@ -2,6 +2,7 @@
 
 import sys, xmpp
 from xmpp.protocol import *
+from xmpp.jep0106 import *
 import config
 from jep0133 import *
 from irc_helpers import irc_ulower
