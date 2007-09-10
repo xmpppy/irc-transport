@@ -1358,8 +1358,12 @@ class Transport:
                 if conf.has_key('subscriptions'):
                     subscriptions = conf['subscriptions']
                     for nick in subscriptions:
-                        self.jabber.send(Presence(to=conn.fromjid, frm = '%s%%%s@%s' % (nick, conn.server, config.jid), typ = 'unavailable'))
-            self.jabber.send(Presence(to=conn.fromjid, frm = '%s@%s' % (conn.server, config.jid), typ = 'unavailable'))
+                        m = Presence(to=conn.fromjid, frm = '%s%%%s@%s' % (nick, conn.server, config.jid), typ = 'unavailable')
+                        m.addChild(name='x',namespace=NS_MUC_USER).addChild(name='item',attrs={'affiliation':'none','role':'none'})
+                        self.jabber.send(m)
+            m = Presence(to=conn.fromjid, frm = '%s@%s' % (conn.server, config.jid), typ = 'unavailable')
+            m.addChild(name='x',namespace=NS_MUC_USER).addChild(name='item',attrs={'affiliation':'none','role':'none'})
+            self.jabber.send(m)
         if self.users[conn.fromjid].has_key(server):
             del self.users[conn.fromjid][server]
             try:
@@ -1644,6 +1648,7 @@ class Transport:
             try:
                 for each in conn.channels.keys():
                     t = Presence(to=conn.fromjid, typ = 'unavailable', frm='%s%%%s@%s' %(each,conn.server,config.jid))
+                    t.addChild(name='x',namespace=NS_MUC_USER).addChild(name='item',attrs={'affiliation':'none','role':'none'})
                     self.jabber.send(t)
                 del self.users[conn.fromjid][conn.server]
             except AttributeError:
@@ -1657,6 +1662,7 @@ class Transport:
                 del conn.channels[channel].members[nick]
                 name = '%s%%%s' % (channel, conn.server)
                 m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, config.jid,nick))
+                m.addChild(name='x',namespace=NS_MUC_USER).addChild(name='item',attrs={'affiliation':'none','role':'none'})
                 self.jabber.send(m)
                 if config.activityMessages == True:
                     line,xhtml = colourparse(event.arguments()[0],conn.charset)
@@ -1937,6 +1943,7 @@ class Transport:
                 m = Message(to='%s/%s'%(conn.fromjid,resource), typ='groupchat',frm='%s@%s' % (name, config.jid), body='%s (%s) has left' % (nick, unicode(irclib.nm_to_uh(event.source()),conn.charset,'replace')))
                 self.jabber.send(m)
         m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, config.jid,nick))
+        m.addChild(name='x',namespace=NS_MUC_USER).addChild(name='item',attrs={'affiliation':'none','role':'none'})
         self.jabber.send(m)
 
     def irc_kick(self,conn,event):
