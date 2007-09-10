@@ -2005,7 +2005,8 @@ class Transport:
         t = m.addChild(name='x', namespace=NS_MUC_USER)
         affiliation = 'none'
         role = 'none'
-        if '@' in event.arguments()[5]:
+        # TODO: Should really parse SUPPORT/PREFIX value
+        if '@' in event.arguments()[5] or '&' in event.arguments()[5] or '~' in event.arguments()[5]:
             role = 'moderator'
             if unicode(event.arguments()[4],conn.charset,'replace') == conn.nickname:
                 affiliation='owner'
