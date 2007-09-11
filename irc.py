@@ -863,7 +863,7 @@ class Transport:
             raise xmpp.NodeProcessed
         conn = self.users[fromjid][server]
         ns = event.getQueryNS()
-        t = event.getQueryPayload()
+        t = event.getQueryChildren()
         if t[0].getName() == 'item':
             attr = t[0].getAttrs()
             if 'role' in attr.keys():
@@ -908,7 +908,7 @@ class Transport:
             raise xmpp.NodeProcessed
         conn = self.users[fromjid][server]
         ns = event.getQueryNS()
-        t = event.getQueryPayload()
+        t = event.getQueryChildren()
         if conn.nickname not in conn.channels[channel].members.keys() \
           or conn.channels[channel].members[conn.nickname]['role'] != 'moderator' \
           or conn.channels[channel].members[conn.nickname]['affiliation'] != 'owner':
@@ -919,9 +919,11 @@ class Transport:
                 attr = t[0].getAttrs()
                 if attr.has_key('role'):
                     if attr['role'] == 'moderator':
+                        conn.mode(channel,'%s %s'%('-v',attr['nick']))
                         conn.mode(channel,'%s %s'%('+o',attr['nick']))
                         raise xmpp.NodeProcessed
                     elif attr['role'] == 'participant':
+                        conn.mode(channel,'%s %s'%('-o',attr['nick']))
                         conn.mode(channel,'%s %s'%('+v',attr['nick']))
                         raise xmpp.NodeProcessed
                     elif attr['role'] == 'visitor':
@@ -929,16 +931,21 @@ class Transport:
                         conn.mode(channel,'%s %s'%('-o',attr['nick']))
                         raise xmpp.NodeProcessed
                     elif attr['role'] == 'none':
-                        conn.kick(channel,attr['nick'],'Kicked')#Need to add reason gathering
+                        # TODO: Need to add reason gathering
+                        conn.kick(channel,attr['nick'],'Kicked')
                         raise xmpp.NodeProcessed
                 if attr.has_key('affiliation'):
                     nick, room = attr['jid'].split('%',1)
                     if attr['affiliation'] == 'member':
-                        conn.mode(channel,'%s %s'%('+v',nick))
+                        # TODO: add invite
                         raise xmpp.NodeProcessed
                     elif attr['affiliation'] == 'none':
-                        conn.mode(channel,'%s %s'%('-v',nick))
-                        conn.mode(channel,'%s %s'%('-o',nick))
+                        # TODO: delete invite
+                        # TODO: delete ban
+                        raise xmpp.NodeProcessed
+                    elif attr['affiliation'] == 'outcast':
+                        # TODO: add ban
+                        conn.kick(channel,nick,'Kicked and banned')
                         raise xmpp.NodeProcessed
 
     def xmpp_iq_mucowner_get(self, con, event):
@@ -959,7 +966,6 @@ class Transport:
             raise xmpp.NodeProcessed
         conn = self.users[fromjid][server]
         ns = event.getQueryNS()
-        t = event.getQueryPayload()
         if conn.nickname not in conn.channels[channel].members.keys() \
           or conn.channels[channel].members[conn.nickname]['role'] != 'moderator' \
           or conn.channels[channel].members[conn.nickname]['affiliation'] != 'owner':
@@ -1003,7 +1009,7 @@ class Transport:
             raise xmpp.NodeProcessed
         conn = self.users[fromjid][server]
         ns = event.getQueryNS()
-        t = event.getQueryPayload()
+        t = event.getQueryChildren()
         if conn.nickname not in conn.channels[channel].members.keys() \
           or conn.channels[channel].members[conn.nickname]['role'] != 'moderator' \
           or conn.channels[channel].members[conn.nickname]['affiliation'] != 'owner':
@@ -1350,6 +1356,17 @@ class Transport:
         if conn.isontimer in timerlist:
             timerlist.remove(conn.isontimer)
         if self.jabber.isConnected():
+            for channel in conn.channels.keys():
+                name = '%s%%%s' % (channel, conn.server)
+                if config.activityMessages == True:
+                    for resource in conn.channels[channel].resources.keys():
+                        m = Message(to='%s/%s'%(conn.fromjid,resource), typ='groupchat',frm='%s@%s' % (name, config.jid), body='QUIT: %s' % message)
+                        self.jabber.send(m)
+                m = Presence(to=conn.fromjid, typ = 'unavailable', frm='%s%%%s@%s/%s' %(channel,conn.server,config.jid,conn.nickname))
+                t=m.addChild(name='x',namespace=NS_MUC_USER)
+                t.addChild(name='item',attrs={'affiliation':'none','role':'none'})
+                t.addChild(name='status', attrs={'code':'110'})
+                self.jabber.send(m)
             fromstripped = conn.fromjid.encode('utf8')
             if userfile.has_key(fromstripped) \
               and userfile[fromstripped].has_key('servers') \
@@ -1358,14 +1375,11 @@ class Transport:
                 if conf.has_key('subscriptions'):
                     subscriptions = conf['subscriptions']
                     for nick in subscriptions:
-                        m = Presence(to=conn.fromjid, frm = '%s%%%s@%s' % (nick, conn.server, config.jid), typ = 'unavailable')
-                        m.addChild(name='x',namespace=NS_MUC_USER).addChild(name='item',attrs={'affiliation':'none','role':'none'})
-                        self.jabber.send(m)
-            m = Presence(to=conn.fromjid, frm = '%s@%s' % (conn.server, config.jid), typ = 'unavailable')
-            m.addChild(name='x',namespace=NS_MUC_USER).addChild(name='item',attrs={'affiliation':'none','role':'none'})
-            self.jabber.send(m)
+                        self.jabber.send(Presence(to=conn.fromjid, frm = '%s%%%s@%s' % (nick, conn.server, config.jid), typ = 'unavailable'))
+            self.jabber.send(Presence(to=conn.fromjid, frm = '%s@%s' % (conn.server, config.jid), typ = 'unavailable'))
         if self.users[conn.fromjid].has_key(server):
             del self.users[conn.fromjid][server]
+            conn.disconnected = True
             try:
                 conn.quit(message)
             except:
@@ -1386,20 +1400,22 @@ class Transport:
             self.irc_doquit(conn,message)
 
     def irc_disconnected(self,conn,event):
-        if config.dumpProtocol: print "disconnected by %s" % conn.address
-        self.irc_doquit(conn)
+        if conn.disconnected: return
+        message = "disconnected by %s" % conn.address
+        if config.dumpProtocol: print message
+        self.irc_doquit(conn, message)
 
     def irc_settopic(self,conn,channel,line):
         try:
             conn.topic(channel.encode(conn.charset,'replace'),line.encode(conn.charset,'replace'))
         except:
-            self.irc_doquit(conn)
+            self.irc_doquit(conn, 'set topic failed')
 
     def irc_sendnick(self,conn,nick):
         try:
             conn.nick(nick)
         except:
-            self.irc_doquit(conn)
+            self.irc_doquit(conn, 'set nick failed')
 
     def irc_sendroom(self,conn,channel,line):
         lines = line.split('\x0a')
@@ -1409,7 +1425,7 @@ class Transport:
                try:
                     conn.privmsg(channel.encode(conn.charset,'replace'),each.encode(conn.charset,'replace'))
                except:
-                    self.irc_doquit(conn)
+                    self.irc_doquit(conn, 'send room failed')
 
     def irc_sendctcp(self,type,conn,channel,line):
         lines = line.split('\x0a')
@@ -1418,7 +1434,7 @@ class Transport:
             try:
                 conn.ctcp(type,channel.encode(conn.charset,'replace'),each.encode(conn.charset,'replace'))
             except:
-                self.irc_doquit(conn)
+                self.irc_doquit(conn, 'send ctcp failed')
 
     def irc_connect(self,channel,server,nick,password,frm,event):
         fromjid = frm.getStripped().__str__()
@@ -1539,6 +1555,7 @@ class Transport:
             conn.server = server
             conn.address = address
             conn.port = port
+            conn.disconnected = False
             conn.fromjid = fromjid
             conn.features = {}
             conn.joinchan = channel
@@ -1567,7 +1584,7 @@ class Transport:
            conn.who(channel)
            conn.mode(channel,'')
         except:
-           self.irc_doquit(conn)
+           self.irc_doquit(conn, 'new room failed')
         class Channel:
             pass
 
@@ -1640,16 +1657,24 @@ class Transport:
         try:
            conn.part([channel.encode(conn.charset,'replace')])
         except:
-            self.irc_doquit(conn)
+            self.irc_doquit(conn, 'leave room failed')
 
     # IRC message handlers
     def irc_error(self,conn,event):
         if conn.server in self.users[conn.fromjid].keys():
             try:
-                for each in conn.channels.keys():
-                    t = Presence(to=conn.fromjid, typ = 'unavailable', frm='%s%%%s@%s' %(each,conn.server,config.jid))
-                    t.addChild(name='x',namespace=NS_MUC_USER).addChild(name='item',attrs={'affiliation':'none','role':'none'})
-                    self.jabber.send(t)
+                line,xhtml = colourparse(event.target(),conn.charset)
+                for channel in conn.channels.keys():
+                    name = '%s%%%s' % (channel, conn.server)
+                    if config.activityMessages == True:
+                        for resource in conn.channels[channel].resources.keys():
+                            m = Message(to='%s/%s'%(conn.fromjid,resource), typ='groupchat',frm='%s@%s' % (name, config.jid), body='ERROR: %s' % line)
+                            self.jabber.send(m)
+                    m = Presence(to=conn.fromjid, typ = 'unavailable', frm='%s%%%s@%s/%s' %(channel,conn.server,config.jid,conn.nickname))
+                    t=m.addChild(name='x',namespace=NS_MUC_USER)
+                    t.addChild(name='item',attrs={'affiliation':'none','role':'none'})
+                    t.addChild(name='status', attrs={'code':'110'})
+                    self.jabber.send(m)
                 del self.users[conn.fromjid][conn.server]
             except AttributeError:
                 pass
@@ -1657,29 +1682,36 @@ class Transport:
     def irc_quit(self,conn,event):
         type = 'unavailable'
         nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
+        line,xhtml = colourparse(event.arguments()[0],conn.charset)
         for channel in conn.channels.keys():
             if nick in conn.channels[channel].members.keys():
                 del conn.channels[channel].members[nick]
                 name = '%s%%%s' % (channel, conn.server)
                 m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, config.jid,nick))
-                m.addChild(name='x',namespace=NS_MUC_USER).addChild(name='item',attrs={'affiliation':'none','role':'none'})
+                m.addChild(name='status',payload=line)
+                t=m.addChild(name='x',namespace=NS_MUC_USER)
+                t.addChild(name='item',attrs={'affiliation':'none','role':'none'})
                 self.jabber.send(m)
                 if config.activityMessages == True:
-                    line,xhtml = colourparse(event.arguments()[0],conn.charset)
-                    m = Message(to=conn.fromjid, typ='groupchat',frm='%s@%s' % (name, config.jid), body='%s (%s) has quit (%s)' % (nick, unicode(irclib.nm_to_uh(event.source()),conn.charset,'replace'), line))
-                    self.jabber.send(m)
+                    for resource in conn.channels[channel].resources.keys():
+                        m = Message(to='%s/%s'%(conn.fromjid,resource), typ='groupchat',frm='%s@%s' % (name, config.jid), body='%s (%s) has quit (%s)' % (nick, unicode(irclib.nm_to_uh(event.source()),conn.charset,'replace'), line))
+                        self.jabber.send(m)
 
     def irc_nick(self, conn, event):
         old = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
         new = unicode(event.target(),conn.charset,'replace')
+        us = False
         if old == conn.nickname:
             conn.nickname = new
+            us = True
         for channel in conn.channels.keys():
             if old in conn.channels[channel].members.keys():
                 m = Presence(to=conn.fromjid,typ = 'unavailable',frm = '%s%%%s@%s/%s' % (channel,conn.server,config.jid,old))
                 p = m.addChild(name='x', namespace=NS_MUC_USER)
                 p.addChild(name='item', attrs={'nick':new})
                 p.addChild(name='status', attrs={'code':'303'})
+                if us:
+                    p.addChild(name='status', attrs={'code':'110'})
                 self.jabber.send(m)
                 m = Presence(to=conn.fromjid,typ = None, frm = '%s%%%s@%s/%s' % (channel,conn.server,config.jid,new))
                 t = m.addChild(name='x',namespace=NS_MUC_USER)
@@ -1776,6 +1808,8 @@ class Transport:
 
         if conn.joinchan:
             self.irc_newroom(conn,conn.joinchan)
+            if conn.xresources.has_key(conn.joinresource):
+                conn.channels[conn.joinchan].resources[conn.joinresource]=conn.xresources[conn.joinresource]
         #TODO: channel join operations should become pending operations
         #       so that they can be tracked correctly
         #       and so that we can send errors to the right place
@@ -1829,7 +1863,7 @@ class Transport:
         try:
            conn.part(event.arguments()[1])
         except:
-           self.irc_doquit(conn)
+           self.irc_doquit(conn, 'redirect failed')
 
     def irc_modeparseadmin(self,conn,event):
     # Mode handling currently is very poor.
@@ -1837,6 +1871,7 @@ class Transport:
     # Issues:
     # Multiple +b's currently not handled
     # +l or -l with no parameter not handled
+    # -o doesn't automatically mean -v too
         channel = irc_ulower(unicode(event.target(),conn.charset,'replace'))
         faddr = '%s%%%s@%s' %(channel,conn.server,config.jid)
         if irclib.is_channel(event.target()):
@@ -1857,6 +1892,7 @@ class Transport:
                 if channel in conn.channels.keys():
                     for each in event.arguments()[1:]:
                         nick = unicode(each,conn.charset,'replace')
+                        # could be visitor or participant if -o
                         conn.channels[channel].members[nick]['role']='visitor'
                         conn.channels[channel].members[nick]['affiliation']='none'
                         m = Presence(to=conn.fromjid,typ=None,frm = '%s/%s' %(faddr,nick))
@@ -1933,33 +1969,56 @@ class Transport:
         channel = irc_ulower(unicode(event.target(),conn.charset,'replace'))
         name = '%s%%%s' % (channel, conn.server)
         nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
-        try:
+        jid = '%s%%%s@%s' % (nick, conn.server, config.jid)
+        line = None
+        if len(event.arguments()) > 0:
+            line,xhtml = colourparse(event.arguments()[0],conn.charset)
+        us = irclib.nm_to_n(event.source()) == conn.nickname
+        if conn.channels.has_key(channel):
             if nick in conn.channels[channel].members.keys():
                 del conn.channels[channel].members[nick]
-        except KeyError:
-            pass
-        if config.activityMessages == True and conn.channels.has_key(channel):
-            for resource in conn.channels[channel].resources.keys():
-                m = Message(to='%s/%s'%(conn.fromjid,resource), typ='groupchat',frm='%s@%s' % (name, config.jid), body='%s (%s) has left' % (nick, unicode(irclib.nm_to_uh(event.source()),conn.charset,'replace')))
-                self.jabber.send(m)
+            if config.activityMessages:
+                msg = ''
+                if line:
+                    msg = ' (%s)' % line
+                for resource in conn.channels[channel].resources.keys():
+                    m = Message(to='%s/%s'%(conn.fromjid,resource), typ='groupchat',frm='%s@%s' % (name, config.jid), body='%s (%s) has left%s' % (nick, unicode(irclib.nm_to_uh(event.source()),conn.charset,'replace'), msg))
+                    self.jabber.send(m)
         m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, config.jid,nick))
-        m.addChild(name='x',namespace=NS_MUC_USER).addChild(name='item',attrs={'affiliation':'none','role':'none'})
+        if line:
+            m.addChild(name='status',payload=line)
+        t=m.addChild(name='x',namespace=NS_MUC_USER)
+        p=t.addChild(name='item',attrs={'affiliation':'none','role':'none','jid':jid})
+        if us:
+            p.addChild(name='status', attrs={'code':'110'})
         self.jabber.send(m)
 
     def irc_kick(self,conn,event):
         type = 'unavailable'
         channel = irc_ulower(unicode(event.target(),conn.charset,'replace'))
         name = '%s%%%s' % (channel, conn.server)
-        jid = '%s%%%s@%s' % (irc_ulower(unicode(event.arguments()[0],conn.charset,'replace')), conn.server, config.jid)
-        m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, config.jid,unicode(event.arguments()[0],conn.charset,'replace')))
+        nick = unicode(event.arguments()[0],conn.charset,'replace')
+        jid = '%s%%%s@%s' % (nick, conn.server, config.jid)
+        line,xhtml = colourparse(event.arguments()[1],conn.charset)
+        us = event.arguments()[0] == conn.nickname
+        if conn.channels.has_key(channel):
+            if nick in conn.channels[channel].members.keys():
+                del conn.channels[channel].members[nick]
+            if us:
+                del conn.channels[channel].members
+            if config.activityMessages == True:
+                for resource in conn.channels[channel].resources.keys():
+                    m = Message(to='%s/%s'%(conn.fromjid,resource), typ='groupchat',frm='%s@%s' % (name, config.jid), body='%s (%s) was kicked by %s (%s)' % (nick, unicode(irclib.nm_to_uh(event.source()),conn.charset,'replace'), unicode(irclib.nm_to_n(event.source()),conn.charset,'replace'), line))
+                    self.jabber.send(m)
+        m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, config.jid,nick))
         t=m.addChild(name='x',namespace=NS_MUC_USER)
         p=t.addChild(name='item',attrs={'affiliation':'none','role':'none','jid':jid})
-        p.addChild(name='reason',payload=[colourparse(event.arguments()[1],conn.charset)][0])
+        p.addChild(name='reason',payload=line)
+        p.addChild(name='actor',attrs={'jid':'%s%%%s@%s' % (unicode(irclib.nm_to_n(event.source()),conn.charset,'replace'), conn.server, config.jid)})
         t.addChild(name='status',attrs={'code':'307'})
+        if us:
+            p.addChild(name='status', attrs={'code':'110'})
         self.jabber.send(m)
-        if event.arguments()[0] == conn.nickname:
-            if conn.channels.has_key(channel):
-                del conn.channels[channel].members
         self.irc_testinuse(conn)
 
     def irc_topic(self,conn,event):
@@ -2358,7 +2417,7 @@ class Transport:
     def xmpp_disconnect(self):
         for each in self.users.keys():
             for item in self.users[each].keys():
-                self.irc_doquit(self.users[each][item])
+                self.irc_doquit(self.users[each][item], 'xmpp disconnected')
             del self.users[each]
         del socketlist[self.jabber.Connection._sock]
         time.sleep(5)
@@ -2394,7 +2453,8 @@ def logError():
     sys.exc_clear()
 
 def sigHandler(signum, frame):
-    #transport.offlinemsg = 'Signal handler called with signal %s'%signum
+    transport.offlinemsg = 'Signal handler called with signal %s'%signum
+    if config.dumpProtocol: print 'Signal handler called with signal %s'%signum
     transport.online = 0
 
 if __name__ == '__main__':
@@ -2440,13 +2500,12 @@ if __name__ == '__main__':
     while transport.online:
         try:
             (i , o, e) = select.select(socketlist.keys(),[],[],1)
-        except socket.error:
+        except (select.error, socket.error):
             for userkey in transport.users:
                 user = transport.users[userkey]
                 for serverkey, server in user.items():
                     if server._get_socket() == None:
-                        if config.dumpProtocol: print "disconnected by %s" % server.address
-                        transport.irc_doquit(server)
+                        transport.irc_disconnected(server, None)
             for each in socketlist.keys():
                 try:
                     (ci, co, ce) = select.select([],[],[each],0)
@@ -2484,7 +2543,7 @@ if __name__ == '__main__':
                     logError()
     for each in [x for x in transport.users.keys()]:
         for item in transport.users[each].keys():
-            transport.irc_doquit(transport.users[each][item])
+            transport.irc_doquit(transport.users[each][item], transport.offlinemsg)
         connection.send(Presence(to=each, frm = config.jid, typ = 'unavailable', status = transport.offlinemsg))
         del transport.users[each]
     del socketlist[connection.Connection._sock]
