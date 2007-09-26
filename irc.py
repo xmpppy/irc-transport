@@ -276,7 +276,8 @@ class Transport:
         self.irc.add_global_handler('mode',self.irc_mode)
         self.irc.add_global_handler('channelmodeis',self.irc_channelmodeis)
         self.irc.add_global_handler('error',self.irc_error)
-        self.irc.add_global_handler('topic',self.irc_topic)
+        self.irc.add_global_handler('topic',self.irc_topic)        # irclib < 1.40
+        self.irc.add_global_handler('currenttopic',self.irc_topic) # irclib >= 1.40
         self.irc.add_global_handler('away',self.irc_away)
         self.irc.add_global_handler('nowaway',self.irc_nowaway)
         self.irc.add_global_handler('unaway',self.irc_unaway)
