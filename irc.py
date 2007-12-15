@@ -1110,13 +1110,20 @@ class Transport:
         else:
             nametype='text-single'
         form = DataForm(typ='form',data=[
-            DataField(desc='Character set'                          ,name='charset' ,value=charset                  ,typ='list-single',options=charsets),
-            DataField(desc='Server alias used for jids'             ,name='alias'   ,value=server                   ,typ=nametype),
-            DataField(desc='Server to connect to'                   ,name='address' ,value=serverdetails['address'] ,typ='text-single'),
-            DataField(desc='Familiar name of the user'              ,name='nick'    ,value=serverdetails['nick']    ,typ='text-single'),
-            DataField(desc='Password or secret for the user'        ,name='password',value=serverdetails['password'],typ='text-private'),
-            DataField(desc='Full name of the user'                  ,name='name'    ,value=serverdetails['realname'],typ='text-single'),
-            DataField(desc='Account name associated with the user'  ,name='username',value=serverdetails['username'],typ='text-single')])
+            DataField(desc='Character set',name='charset',label='Charset',
+                value=charset,typ='list-single',options=((x,x) for x in charsets)),
+            DataField(desc='Server alias used for jids',name='alias',label='Server alias',
+                value=server,typ=nametype),
+            DataField(desc='Server to connect to',name='address',label='Address',
+                value=serverdetails['address'],typ='text-single'),
+            DataField(desc='Familiar name of the user',name='nick',label='Nickname',
+                value=serverdetails['nick'],typ='text-single'),
+            DataField(desc='Password or secret for the user',name='password',label='Password',
+                value=serverdetails['password'],typ='text-private'),
+            DataField(desc='Full name of the user',name='name',label='Full name',
+                value=serverdetails['realname'],typ='text-single'),
+            DataField(desc='Account name associated with the user (ident)',name='username',label='Account name',
+                value=serverdetails['username'],typ='text-single')])
         form.setInstructions(instructionText)
         queryPayload += [
             Node('charset'  ,payload=charset),
@@ -1290,14 +1297,14 @@ class Transport:
 
                 instructionText = 'Fill in the form to search for any matching room (Add * to the end of field to match substring)'
                 queryPayload = [Node('instructions', payload = instructionText)]
-        
+
                 form = DataForm(typ='form',data=[
                     DataField(desc='Name of the channel',name='name',typ='text-single')])
                 form.setInstructions(instructionText)
                 queryPayload += [
                     Node('name'),
                     form]
-        
+
                 m = event.buildReply('result')
                 m.setQueryNS(NS_SEARCH)
                 m.setQueryPayload(queryPayload)
@@ -2079,11 +2086,8 @@ class Transport:
         jid = '%s%%%s@%s' % (unicode(event.arguments()[4],conn.charset,'replace'), conn.server, config.jid)
         p=t.addChild(name='item',attrs={'affiliation':affiliation,'role':role,'jid':jid})
         self.jabber.send(m)
-        try:
-            if (event.arguments()[0] != '*') and (nick not in conn.channels[channel].members.keys()):
-                conn.channels[channel].members[nick]={'affiliation':affiliation,'role':role,'jid':jid}
-        except KeyError:
-            pass
+        if event.arguments()[0] != '*' and conn.channels.has_key(channel):
+            conn.channels[channel].members[nick]={'affiliation':affiliation,'role':role,'jid':jid}
 
     def irc_whoisgetvcard(self,conn,event):
         nick = irc_ulower(unicode(event.arguments()[0],conn.charset,'replace'))
