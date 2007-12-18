@@ -98,6 +98,7 @@ class Connect_Server_Command(xmpp.commands.Command_Handler_Prototype):
     def _DiscoHandler(self,conn,event,type):
         """The handler for discovery events"""
         fromjid = event.getFrom().getStripped().__str__()
+        resource = event.getFrom().getResource()
         to = event.getTo()
         room = irc_ulower(to.getNode())
         try:
@@ -107,7 +108,10 @@ class Connect_Server_Command(xmpp.commands.Command_Handler_Prototype):
             channel=''
             server=room
             sys.exc_clear()
-        if channel == '' and (not self.transport.users.has_key(fromjid) or not self.transport.users[fromjid].has_key(server)):
+        if channel == '' and not (
+                self.transport.users.has_key(fromjid) and
+                self.transport.users[fromjid].has_key(server) and
+                self.transport.users[fromjid][server].xresources.has_key(resource)):
             return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,event,type)
         else:
             return None
@@ -154,6 +158,7 @@ class Disconnect_Server_Command(xmpp.commands.Command_Handler_Prototype):
     def _DiscoHandler(self,conn,event,type):
         """The handler for discovery events"""
         fromjid = event.getFrom().getStripped().__str__()
+        resource = event.getFrom().getResource()
         to = event.getTo()
         room = irc_ulower(to.getNode())
         try:
@@ -163,7 +168,10 @@ class Disconnect_Server_Command(xmpp.commands.Command_Handler_Prototype):
             channel=''
             server=room
             sys.exc_clear()
-        if channel == '' and self.transport.users.has_key(fromjid) and self.transport.users[fromjid].has_key(server):
+        if channel == '' and (
+                self.transport.users.has_key(fromjid) and
+                self.transport.users[fromjid].has_key(server) and
+                self.transport.users[fromjid][server].xresources.has_key(resource)):
             return xmpp.commands.Command_Handler_Prototype._DiscoHandler(self,conn,event,type)
         else:
             return None

@@ -229,8 +229,8 @@ class Transport:
     #       private             - bool
     #       secret              - bool
     #       invite              - bool
-    #       topic               - bool
-    #       notmember           - bool
+    #       topiclock           - bool
+    #       noexternalmsgs      - bool
     #       moderated           - bool
     #       banlist             - list
     #       limit               - number
@@ -974,16 +974,27 @@ class Transport:
             raise xmpp.NodeProcessed
 
         chan = conn.channels[channel]
+        def b(value):
+            return str(value).lower()
         datafrm = DataForm(typ='form',data=[
-            DataField(desc='Private'                        ,name='private'     ,value=chan.private     ,typ='boolean'),
-            DataField(desc='Secret'                         ,name='secret'      ,value=chan.secret      ,typ='boolean'),
-            DataField(desc='Invite Only'                    ,name='invite'      ,value=chan.invite      ,typ='boolean'),
-            DataField(desc='Only ops can change the Topic'  ,name='topic'       ,value=chan.topic       ,typ='boolean'),
-            DataField(desc='No external channel messages'   ,name='notmember'   ,value=chan.notmember   ,typ='boolean'),
-            DataField(desc='Moderated Channel'              ,name='moderated'   ,value=chan.moderated   ,typ='boolean'),
-            DataField(desc='Ban List'                       ,name='banlist'     ,value=chan.banlist     ,typ='text-multi'),
-            DataField(desc='Channel Limit'                  ,name='limit'       ,value=chan.limit       ,typ='text-single'),
-            DataField(desc='Channel Key'                    ,name='key'         ,value=chan.key         ,typ='text-single')])
+            DataField(desc='Private (hide topic from outsiders)',name='private',label='Private',
+                value=b(chan.private),typ='boolean'),
+            DataField(desc='Secret (hide channel from outsiders)',name='secret',label='Secret',
+                value=b(chan.secret),typ='boolean'),
+            DataField(desc='Invite Only',name='invite',label='Invite Only',
+                value=b(chan.invite),typ='boolean'),
+            DataField(desc='Only ops can change the Topic',name='topiclock',label='Topic Lock',
+                value=b(chan.topiclock),typ='boolean'),
+            DataField(desc='No external channel messages',name='noexternalmsgs',label='No External Msgs',
+                value=b(chan.noexternalmsgs),typ='boolean'),
+            DataField(desc='Moderated Channel',name='moderated',label='Moderated',
+                value=b(chan.moderated),typ='boolean'),
+            DataField(desc='Ban List',name='banlist',label='Ban List',
+                value=chan.banlist,typ='text-multi'),
+            DataField(desc='Channel Member Limit',name='limit',label='Limit',
+                value=chan.limit,typ='text-single'),
+            DataField(desc='Channel Key/Password',name='key',label='Key',
+                value=chan.key,typ='text-single')])
         datafrm.setInstructions('Configure the room')
 
         m = Iq(frm = to, to = event.getFrom(), typ='result', queryNS=ns)
@@ -1028,15 +1039,16 @@ class Transport:
                     typ='+'
                 else:
                     typ='-'
+                cmd = None
                 if each == 'private':
                     cmd = 'p'
                 elif each == 'secret':
                     cmd = 's'
                 elif each == 'invite':
                     cmd = 'i'
-                elif each == 'topic':
+                elif each == 'topiclock':
                     cmd = 't'
-                elif each == 'notmember':
+                elif each == 'noexternalmsgs':
                     cmd = 'n'
                 elif each == 'moderated':
                     cmd = 'm'
@@ -1064,7 +1076,7 @@ class Transport:
                     else:
                         typ='-'
                         cmd='k %s' % conn.channels[channel].key
-                if not handled and fieldValue != getattr(conn.channels[channel], each):
+                if not handled and cmd and fieldValue != getattr(conn.channels[channel], each):
                     conn.mode(channel,'%s%s' % (typ,cmd))
         m = Iq(frm = to, to = event.getFrom(), typ='result', queryNS=ns)
         m.setID(id)
@@ -1226,7 +1238,8 @@ class Transport:
                 servers = {}
                 if conf.has_key('servers'):
                     servers = conf['servers']
-                if irc_ulower(to.getNode()) == '' and servers.has_key(server):
+                server = irc_ulower(server)
+                if room == '' and servers.has_key(server):
                     self.jabber.send(Error(event,ERR_NOT_ACCEPTABLE))
                     raise xmpp.NodeProcessed
                 if not serverdetails.has_key('nick') or serverdetails['nick'] == '':
@@ -1295,11 +1308,12 @@ class Transport:
         if self.users.has_key(fromjid):
             if self.users[fromjid].has_key(server):
 
-                instructionText = 'Fill in the form to search for any matching room (Add * to the end of field to match substring)'
+                instructionText = 'Fill in the form to search for matching rooms'
                 queryPayload = [Node('instructions', payload = instructionText)]
 
                 form = DataForm(typ='form',data=[
-                    DataField(desc='Name of the channel',name='name',typ='text-single')])
+                    DataField(desc='Name of the channel',name='name',label='Channel Name',
+                        typ='text-single')])
                 form.setInstructions(instructionText)
                 queryPayload += [
                     Node('name'),
@@ -1337,6 +1351,10 @@ class Transport:
                 name = form.getField('name').getValue()
         elif query.getTag('name'):
             name = query.getTagData('name')
+        if not irclib.is_channel(name):
+            name = '#' + name
+        if name[-1:] != '*':
+            name += '*'
 
         if self.users.has_key(fromjid):
             if self.users[fromjid].has_key(server):
@@ -1600,8 +1618,8 @@ class Transport:
         chan.private = False
         chan.secret = False
         chan.invite = False
-        chan.topic = False
-        chan.notmember = False
+        chan.topiclock = False
+        chan.noexternalmsgs = False
         chan.moderated = False
         chan.banlist = []
         chan.limit = 0
@@ -1946,9 +1964,9 @@ class Transport:
             elif each == 'i': #invite only
                 conn.channels[channel].invite = plus
             elif each == 't': #only chanop can set topic
-                conn.channels[channel].topic = plus
+                conn.channels[channel].topiclock = plus
             elif each == 'n': #no not in channel messages
-                conn.channels[channel].notmember = plus
+                conn.channels[channel].noexternalmsgs = plus
             elif each == 'm': #moderated chanel
                 conn.channels[channel].moderated = plus
             elif each == 'l': #set channel limit
