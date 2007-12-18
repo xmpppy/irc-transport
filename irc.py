@@ -268,9 +268,10 @@ class Transport:
         self.irc.add_global_handler('adminloc1',self.irc_message)
         self.irc.add_global_handler('adminloc2',self.irc_message)
         self.irc.add_global_handler('adminemail',self.irc_message)
-        self.irc.add_global_handler('links',self.irc_message)
+        self.irc.add_global_handler('links',self.irc_message) # TODO: Specialise
         #self.irc.add_global_handler('endoflinks',self.irc_message)
         self.irc.add_global_handler('468',self.irc_message)
+        self.irc.add_global_handler('erroneusnickname',self.irc_message) # TODO: Specialise
         self.irc.add_global_handler('whoreply',self.irc_whoreply)
         self.irc.add_global_handler('ctcp',self.irc_ctcp)
         self.irc.add_global_handler('ctcpreply',self.irc_ctcpreply)
@@ -1458,7 +1459,7 @@ class Transport:
 
     def irc_sendnick(self,conn,nick):
         try:
-            conn.nick(nick)
+            conn.nick(nick.encode(conn.charset,'replace'))
         except:
             self.irc_doquit(conn, 'set nick failed')
 
@@ -1596,7 +1597,7 @@ class Transport:
             if len(addressdetails) > 1:
                 port = int(addressdetails[1]);
             address = addressdetails[0];
-            conn=self.irc.server().connect(address,port,nick,password,username,realname,config.host)
+            conn=self.irc.server().connect(address,port,nick.encode(ucharset,'replace'),password,username,realname,config.host)
             conn.server = server
             conn.address = address
             conn.port = port
