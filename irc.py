@@ -264,6 +264,12 @@ class Transport:
         self.irc.add_global_handler('pubnotice',self.irc_message)
         self.irc.add_global_handler('privmsg',self.irc_message)
         self.irc.add_global_handler('privnotice',self.irc_message)
+        self.irc.add_global_handler('adminme',self.irc_message)
+        self.irc.add_global_handler('adminloc1',self.irc_message)
+        self.irc.add_global_handler('adminloc2',self.irc_message)
+        self.irc.add_global_handler('adminemail',self.irc_message)
+        self.irc.add_global_handler('links',self.irc_message)
+        #self.irc.add_global_handler('endoflinks',self.irc_message)
         self.irc.add_global_handler('468',self.irc_message)
         self.irc.add_global_handler('whoreply',self.irc_whoreply)
         self.irc.add_global_handler('ctcp',self.irc_ctcp)
@@ -811,6 +817,15 @@ class Transport:
             channel=''
             server=room
             sys.exc_clear()
+        if not server:
+            m = Iq(to=event.getFrom(),frm=to, typ='result')
+            m.setID(id)
+            p = m.addChild(name='vCard', namespace=NS_VCARD)
+            p.setTagData(tag='FN', val='IRC Transport')
+            p.setTagData(tag='DESC', val='IRC Transport')
+            p.setTagData(tag='URL', val='http://xmpppy.sourceforge.net/irc/')
+            self.jabber.send(m)
+            raise xmpp.NodeProcessed
         if not self.users.has_key(fromjid):
             self.jabber.send(Error(event,ERR_REGISTRATION_REQUIRED))         # another candidate: ERR_SUBSCRIPTION_REQUIRED
             raise xmpp.NodeProcessed
@@ -828,10 +843,14 @@ class Transport:
         m = Iq(to=event.getFrom(),frm=to, typ='result')
         m.setID(id)
         p = m.addChild(name='vCard', namespace=NS_VCARD)
-        p.setTagData(tag='DESC', val='Additional Information:')
 
-        conn.pendingoperations["whois:" + irc_ulower(nick)] = m
-        conn.whois([(nick + ' ' + nick).encode(conn.charset,'replace')])
+        if channel:
+            p.setTagData(tag='DESC', val='Additional Information:')
+            conn.pendingoperations["whois:" + irc_ulower(nick)] = m
+            conn.whois([(nick + ' ' + nick).encode(conn.charset,'replace')])
+        else:
+            conn.admin()
+            self.jabber.send(m)
 
         raise xmpp.NodeProcessed
 
