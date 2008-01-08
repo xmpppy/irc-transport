@@ -2464,8 +2464,9 @@ class Transport:
             del self.users[each]
         del socketlist[self.jabber.Connection._sock]
         time.sleep(5)
-        while not self.jabber.reconnectAndReauth():
+        if not self.jabber.reconnectAndReauth():
             time.sleep(5)
+            self.xmpp_connect()
         socketlist[self.jabber.Connection._sock]='xmpp'
 
 def loadConfig():
