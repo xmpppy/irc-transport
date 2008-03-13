@@ -235,7 +235,7 @@ class Transport:
     #       banlist             - list
     #       limit               - number
     #       key                 - string
-    #       currenttopic        - string
+    #       currenttopic        - tuple of strings - (nickname, topic)
     #       members             - hash      - key is nick of member, value is hash, key is 'affiliation', 'role', 'jid', 'nick'
     #       resources           - hash      - key is resource, value is tuple of: show, priority, status, login time
     #   pendingoperations   - hash      - key is internal name of operation, joined with nick if applicable, value a list of tuples of (op,callback,data)
@@ -757,14 +757,12 @@ class Transport:
                     for state in xevent.getChildren():
                         states.append(state.getName())
                     self.irc_sendctcp('X:EVENT',conn,nick,','.join(states))
-            return
         if type == 'groupchat':
             if config.dumpProtocol: print "Groupchat"
             if irclib.is_channel(channel) and conn.channels.has_key(channel):
-                if config.dumpProtocol: print "channel:", event.getBody().encode('utf8')
                 if event.getSubject():
                     if config.dumpProtocol: print "subject"
-                    if conn.channels[channel].topic:
+                    if conn.channels[channel].topiclock:
                         if config.dumpProtocol: print "topic"
                         if conn.channels[channel].members[conn.nickname]['role'] == 'moderator':
                             if config.dumpProtocol: print "set topic ok"
@@ -776,7 +774,7 @@ class Transport:
                         if config.dumpProtocol: print "anyone can set topic"
                         self.irc_settopic(conn,channel,event.getSubject())
                 elif event.getBody() != '':
-                    if config.dumpProtocol: print "body isn't empty:" , event.getBody().encode('utf8')
+                    if config.dumpProtocol: print "channel:", event.getBody().encode('utf8')
                     if event.getBody()[0:3] == '/me':
                         if config.dumpProtocol: print "action"
                         self.irc_sendctcp('ACTION',conn,channel,event.getBody()[4:])
@@ -788,7 +786,7 @@ class Transport:
                         self.jabber.send(t)
             else:
                 self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))  # or MALFORMED_JID maybe?
-        elif type in ['chat', 'normal', None]:
+        elif type in ['chat', 'normal', None] and event.getBody() != '':
             if nick:
                 if conn.activechats.has_key(irc_ulower(nick)):
                     conn.activechats[irc_ulower(nick)] = [to,event.getFrom(),time.time(),conn.activechats[irc_ulower(nick)][3]]
@@ -1507,12 +1505,11 @@ class Transport:
                         if config.dumpProtocol: print "Update channel resource login: %s" % conn.channels[channel].resources
                     else:
                         #new resource login
+                        name = '%s%%%s@%s' % (channel, server, config.jid)
+                        # resource is joining an existing resource on the same channel
+                        previousresources = conn.channels[channel].resources.keys()
                         conn.channels[channel].resources[resource]=(event.getShow(),event.getPriority(),event.getStatus(),time.time())
                         if config.dumpProtocol: print "New channel resource login: %s" % conn.channels[channel].resources
-                        # resource is joining an existing resource on the same channel
-                        # TODO: Send topic to new resource
-                        # TODO: Alert existing resources that a new resource has joined
-                        name = '%s%%%s@%s' % (channel, server, config.jid)
                         for cnick in conn.channels[channel].members.keys():
                             if cnick == conn.nickname:
                                 #if config.dumpProtocol: print 'nnick %s %s %s'%(name,cnick,nick)
@@ -1522,6 +1519,16 @@ class Transport:
                                 m = Presence(to=conn.fromjid,frm='%s/%s' %(name, cnick))
                             t=m.addChild(name='x',namespace=NS_MUC_USER)
                             p=t.addChild(name='item',attrs=conn.channels[channel].members[cnick])
+                            self.jabber.send(m)
+                        for oresource in previousresources:
+                            m = Message(to='%s/%s'%(conn.fromjid,oresource), typ='groupchat',frm=name, body='%s/%s has joined' % (nick, resource))
+                            self.jabber.send(m)
+                            m = Message(to='%s/%s'%(conn.fromjid,resource), typ='groupchat',frm=name, body='%s/%s has joined' % (nick, oresource))
+                            self.jabber.send(m)
+                        if conn.channels[channel].currenttopic[0]:
+                            m = Message(to='%s/%s'%(conn.fromjid,resource),frm='%s/%s' %(name, conn.channels[channel].currenttopic[0]), typ='groupchat', subject = conn.channels[channel].currenttopic[1])
+                            if config.activityMessages == True:
+                                m.setBody('/me set the topic to: %s' % conn.channels[channel].currenttopic[1])
                             self.jabber.send(m)
                 return 1
             else:
@@ -1644,7 +1651,7 @@ class Transport:
         chan.banlist = []
         chan.limit = 0
         chan.key = ''
-        chan.currenttopic = ''
+        chan.currenttopic = (None,None)
         chan.members = {}   # irc nicks in the channel
         chan.resources = {}
 
@@ -1665,6 +1672,13 @@ class Transport:
                         if conn.channels[channel].resources.has_key(resource):
                             del conn.channels[channel].resources[resource]
                         if config.dumpProtocol: print "Deleted channel resource login: %s" % conn.channels[channel].resources
+                        msg = ''
+                        if message:
+                            msg = ' (%s)' % message
+                        name = '%s%%%s' % (channel, conn.server)
+                        for oresource in conn.channels[channel].resources.keys():
+                            m = Message(to='%s/%s'%(conn.fromjid,oresource), typ='groupchat',frm='%s@%s' % (name, config.jid), body='%s/%s has left%s' % (conn.nickname, resource, msg))
+                            self.jabber.send(m)
                         if conn.channels[channel].resources == {}:
                             self.irc_leaveroom(conn,channel)
                             del conn.channels[channel]
@@ -2075,7 +2089,7 @@ class Transport:
         else:
             channel = irc_ulower(unicode(event.target(),conn.charset,'replace'))
             line,xhtml = colourparse(event.arguments()[0],conn.charset)
-        conn.channels[channel].currenttopic = line
+        conn.channels[channel].currenttopic = (nick,line)
         for resource in conn.channels[channel].resources.keys():
             m = Message(to='%s/%s'%(conn.fromjid,resource),frm = '%s%%%s@%s/%s' % (channel,conn.server,config.jid,nick), typ='groupchat', subject = line)
             if config.activityMessages == True:
