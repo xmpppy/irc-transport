@@ -2064,12 +2064,12 @@ class Transport:
         if conn.channels.has_key(channel):
             if nick in conn.channels[channel].members.keys():
                 del conn.channels[channel].members[nick]
-            if us:
-                del conn.channels[channel].members
             if config.activityMessages == True:
                 for resource in conn.channels[channel].resources.keys():
                     m = Message(to='%s/%s'%(conn.fromjid,resource), typ='groupchat',frm='%s@%s' % (name, config.jid), body='%s (%s) was kicked by %s (%s)' % (nick, unicode(irclib.nm_to_uh(event.source()),conn.charset,'replace'), unicode(irclib.nm_to_n(event.source()),conn.charset,'replace'), line))
                     self.jabber.send(m)
+            if us:
+                del conn.channels[channel]
         m = Presence(to=conn.fromjid,typ=type,frm='%s@%s/%s' %(name, config.jid,nick))
         t=m.addChild(name='x',namespace=NS_MUC_USER)
         p=t.addChild(name='item',attrs={'affiliation':'none','role':'none','jid':jid})
