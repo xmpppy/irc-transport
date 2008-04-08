@@ -748,7 +748,7 @@ class Transport:
             nick = channel
         else:
             nick = to.getResource()
-        if event.getBody() == None:
+        if not event.getBody():
             xevent = event.getTag('x',namespace=NS_EVENT)
             if xevent and conn.activechats.has_key(irc_ulower(nick)):
                 chat = conn.activechats[irc_ulower(nick)]
@@ -773,7 +773,7 @@ class Transport:
                     else:
                         if config.dumpProtocol: print "anyone can set topic"
                         self.irc_settopic(conn,channel,event.getSubject())
-                elif event.getBody() != '':
+                elif event.getBody():
                     if config.dumpProtocol: print "channel:", event.getBody().encode('utf8')
                     if event.getBody()[0:3] == '/me':
                         if config.dumpProtocol: print "action"
@@ -786,7 +786,7 @@ class Transport:
                         self.jabber.send(t)
             else:
                 self.jabber.send(Error(event,ERR_ITEM_NOT_FOUND))  # or MALFORMED_JID maybe?
-        elif type in ['chat', 'normal', None] and event.getBody() != '':
+        elif type in ['chat', 'normal', None] and event.getBody():
             if nick:
                 if conn.activechats.has_key(irc_ulower(nick)):
                     conn.activechats[irc_ulower(nick)] = [to,event.getFrom(),time.time(),conn.activechats[irc_ulower(nick)][3]]
