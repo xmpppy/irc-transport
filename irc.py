@@ -285,6 +285,7 @@ class Transport:
         self.irc.add_global_handler('error',self.irc_error)
         self.irc.add_global_handler('topic',self.irc_topic)        # irclib < 1.40
         self.irc.add_global_handler('currenttopic',self.irc_topic) # irclib >= 1.40
+        self.irc.add_global_handler('topicinfo',self.irc_topicinfo)
         self.irc.add_global_handler('away',self.irc_away)
         self.irc.add_global_handler('nowaway',self.irc_nowaway)
         self.irc.add_global_handler('unaway',self.irc_unaway)
@@ -1525,10 +1526,11 @@ class Transport:
                             self.jabber.send(m)
                             m = Message(to='%s/%s'%(conn.fromjid,resource), typ='groupchat',frm=name, body='%s/%s has joined' % (nick, oresource))
                             self.jabber.send(m)
-                        if conn.channels[channel].currenttopic[0]:
-                            m = Message(to='%s/%s'%(conn.fromjid,resource),frm='%s/%s' %(name, conn.channels[channel].currenttopic[0]), typ='groupchat', subject = conn.channels[channel].currenttopic[1])
+                        currenttopic = conn.channels[channel].currenttopic
+                        if currenttopic[0]:
+                            m = Message(to='%s/%s'%(conn.fromjid,resource),frm='%s/%s' %(name, currenttopic[0]), typ='groupchat', subject = currenttopic[1], timestamp = currenttopic[2])
                             if config.activityMessages == True:
-                                m.setBody('/me set the topic to: %s' % conn.channels[channel].currenttopic[1])
+                                m.setBody('/me set the topic to: %s' % currenttopic[1])
                             self.jabber.send(m)
                 return 1
             else:
@@ -2083,15 +2085,30 @@ class Transport:
 
     def irc_topic(self,conn,event):
         nick = unicode(irclib.nm_to_n(event.source()),conn.charset,'replace')
-        if len(event.arguments())==2:
+        if len(event.arguments()) == 2:
+            # current topic on join
             channel = irc_ulower(unicode(event.arguments()[0],conn.charset,'replace'))
             line,xhtml = colourparse(event.arguments()[1],conn.charset)
-        else:
-            channel = irc_ulower(unicode(event.target(),conn.charset,'replace'))
-            line,xhtml = colourparse(event.arguments()[0],conn.charset)
-        conn.channels[channel].currenttopic = (nick,line)
+            conn.channels[channel].currenttopic = (None,line,None)
+            return
+        # topic changed in channel by person
+        channel = irc_ulower(unicode(event.target(),conn.charset,'replace'))
+        line,xhtml = colourparse(event.arguments()[0],conn.charset)
+        conn.channels[channel].currenttopic = (nick,line,time.strftime('%Y%m%dT%H:%M:%S', time.gmtime()))
         for resource in conn.channels[channel].resources.keys():
             m = Message(to='%s/%s'%(conn.fromjid,resource),frm = '%s%%%s@%s/%s' % (channel,conn.server,config.jid,nick), typ='groupchat', subject = line)
+            if config.activityMessages == True:
+                m.setBody('/me set the topic to: %s' % line)
+            self.jabber.send(m)
+
+    def irc_topicinfo(self,conn,event):
+        channel = irc_ulower(unicode(event.arguments()[0],conn.charset,'replace'))
+        nick = unicode(event.arguments()[1],conn.charset,'replace')
+        timestamp = time.strftime('%Y%m%dT%H:%M:%S', time.gmtime(float(event.arguments()[2])))
+        line = conn.channels[channel].currenttopic[1]
+        conn.channels[channel].currenttopic = (nick,line,timestamp)
+        for resource in conn.channels[channel].resources.keys():
+            m = Message(to='%s/%s'%(conn.fromjid,resource),frm = '%s%%%s@%s/%s' % (channel,conn.server,config.jid,nick), typ='groupchat', subject = line, timestamp = timestamp)
             if config.activityMessages == True:
                 m.setBody('/me set the topic to: %s' % line)
             self.jabber.send(m)
