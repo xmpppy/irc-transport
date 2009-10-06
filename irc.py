@@ -1,6 +1,9 @@
 #!/usr/bin/python
-# $Id$
-version = 'CVS ' + '$Revision$'.split()[1]
+import os
+try:
+    version = 'git ' + open(os.path.join(os.path.dirname(__file__), '.git/refs/heads/master')).read().strip()
+except:
+    version = 'unknown'
 #
 # IRC transport
 # January 2004 Copyright (c) Mike Albon
